@@ -1,0 +1,16 @@
+Alur penggunaan yang diharapkan :
+- Pertama aksi dari scan ada 2 : Packing dan Kirim
+- Resi dicetak di tik tok shop seller center (output PDF dengan nama file jam cth. 15.57)
+- Resi yang dicetak fisik akan dipasangkan dengan barang yang sesuai (packing)
+- Resi PDF akan diinput kedalam web
+- Antarmuka Utamanya adalah : 1. field tabel data resi (ada filter per file yang diupload dan filter basic lainnya), 2. ada field kosong yang akan memunculkan informasi setelah scan
+- Setelah packing akan discan dengan aksi Packing. Setelah discan akan muncul detail pesanan (No resi, Alamat, Judul Barang, SKU, SKU penjual, Quantity). Bersamaan dengan itu, akan muncul noifikasi sebagai berikut :
+    a. Berhasil. jika berhasil maka update agar kolom dikemas == True. lalu ada tombol kecil untuk Yes == commit change dan Cancel == discard change
+    b. Duplikat. ada tombol "duplikat dihilangkan" atau anda sarankan kata yang lebih baik 
+- Setelah semua selesai, ketika akan dikirim maka discan lalu :
+    a. Berhasil. jika berhasil maka update agar kolom dikirim == True. lalu ada tombol kecil untuk Yes == commit change dan Cancel == discard change
+    b. Duplikat. ada tombol "duplikat dihilangkan" atau anda sarankan kata yang lebih baik 
+- Selain itu berikan notifikasi jika ada yang belum dikemas atau belum dikirim
+
+
+contoh pdf resi bisa anda lihat di : E:\Coding\ERP-Sukma\tracking\docs\15.51.pdf
