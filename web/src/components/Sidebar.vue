@@ -10,6 +10,20 @@ const router = useRouter();
 const user = computed(() => authStore.user);
 const isMobileOpen = ref(false);
 
+// Desktop Collapsed State (disimpan di localStorage)
+const isCollapsed = ref<boolean>(
+  typeof window !== 'undefined' ? localStorage.getItem('sidebar_collapsed') === 'true' : false
+);
+
+function toggleCollapse() {
+  isCollapsed.value = !isCollapsed.value;
+  try {
+    localStorage.setItem('sidebar_collapsed', String(isCollapsed.value));
+  } catch {
+    // Abaikan jika localStorage tidak dapat diakses
+  }
+}
+
 async function handleLogout() {
   await authStore.logout();
   router.push('/login');
@@ -209,33 +223,89 @@ function closeMobile() {
     </div>
   </div>
 
-  <!-- 3. Desktop Permanent Sidebar (>= 768px, 'hidden md:flex') -->
+  <!-- 3. Desktop Permanent Sidebar (>= 768px, 'hidden md:flex', Collapsible) -->
   <aside
-    class="hidden md:flex flex-col w-64 h-screen sticky top-0 shrink-0 bg-white border-r border-slate-200/80 z-30 justify-between select-none shadow-[1px_0_3px_0_rgba(0,0,0,0.02)]"
+    class="hidden md:flex flex-col h-screen sticky top-0 shrink-0 bg-white border-r border-slate-200/80 z-30 justify-between select-none shadow-[1px_0_3px_0_rgba(0,0,0,0.02)] transition-all duration-300 ease-in-out"
+    :class="[isCollapsed ? 'w-20' : 'w-64']"
   >
-    <div class="flex flex-col flex-1 overflow-y-auto">
-      <!-- ELLITH Brand Logo Header -->
-      <div class="p-5 border-b border-slate-100 flex items-center space-x-3 bg-slate-50/40">
+    <div class="flex flex-col flex-1 overflow-y-auto overflow-x-hidden">
+      <!-- ELLITH Brand Header & Collapse Toggle Button -->
+      <div
+        v-if="!isCollapsed"
+        class="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/40 min-h-[73px]"
+      >
+        <div class="flex items-center space-x-3 min-w-0">
+          <div
+            class="h-10 w-10 rounded-xl bg-white border border-slate-200 shadow-sm flex items-center justify-center p-1.5 overflow-hidden shrink-0"
+          >
+            <img src="/logo.jpg" alt="Logo ELLITH" class="h-full w-full object-contain" />
+          </div>
+          <div class="min-w-0">
+            <div class="flex items-center space-x-1.5">
+              <span class="text-lg font-black tracking-wider text-slate-900 leading-none">
+                ELLITH
+              </span>
+              <span
+                class="text-[9px] font-black tracking-widest uppercase bg-slate-900 text-white px-1.5 py-0.5 rounded"
+              >
+                OPS
+              </span>
+            </div>
+            <div class="text-[10px] text-slate-400 font-medium truncate mt-0.5">
+              TikTok &bull; J&amp;T
+            </div>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          @click="toggleCollapse"
+          class="p-2 rounded-xl text-slate-400 hover:text-slate-800 hover:bg-slate-100 transition cursor-pointer shrink-0"
+          title="Ciutkan Sidebar"
+          aria-label="Ciutkan Sidebar"
+        >
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M11 19l-7-7 7-7m8 14l-7-7 7-7"
+            />
+          </svg>
+        </button>
+      </div>
+
+      <!-- Collapsed Header -->
+      <div
+        v-else
+        class="p-3 border-b border-slate-100 flex flex-col items-center justify-center gap-2 bg-slate-50/40 min-h-[73px]"
+      >
         <div
-          class="h-11 w-11 rounded-xl bg-white border border-slate-200 shadow-sm flex items-center justify-center p-1.5 overflow-hidden shrink-0"
+          class="h-10 w-10 rounded-xl bg-white border border-slate-200 shadow-sm flex items-center justify-center p-1.5 overflow-hidden shrink-0"
+          title="ELLITH OPS"
         >
           <img src="/logo.jpg" alt="Logo ELLITH" class="h-full w-full object-contain" />
         </div>
-        <div class="min-w-0">
-          <div class="flex items-center space-x-1.5">
-            <span class="text-lg font-black tracking-wider text-slate-900 leading-none"
-              >ELLITH</span
-            >
-            <span
-              class="text-[9px] font-black tracking-widest uppercase bg-slate-900 text-white px-1.5 py-0.5 rounded"
-              >OPS</span
-            >
-          </div>
-        </div>
+        <button
+          type="button"
+          @click="toggleCollapse"
+          class="p-1 rounded-lg text-slate-400 hover:text-slate-800 hover:bg-slate-200/70 transition cursor-pointer"
+          title="Perluas Sidebar"
+          aria-label="Perluas Sidebar"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M13 5l7 7-7 7M5 5l7 7-7 7"
+            />
+          </svg>
+        </button>
       </div>
 
-      <!-- Main Navigation Menu (HANYA 2 MENU UTAMA) -->
-      <div class="px-3 py-5 space-y-1.5 flex-1">
+      <!-- Main Navigation Menu (Expanded) -->
+      <div v-if="!isCollapsed" class="px-3 py-5 space-y-1.5 flex-1">
         <div class="px-3 pb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
           Menu Utama
         </div>
@@ -303,8 +373,55 @@ function closeMobile() {
         </RouterLink>
       </div>
 
-      <!-- Local Network System Status Note -->
+      <!-- Main Navigation Menu (Collapsed - Icon Centered) -->
+      <div v-else class="px-2 py-5 space-y-2.5 flex-1 flex flex-col items-center">
+        <!-- 1. Pesanan Icon -->
+        <RouterLink
+          to="/orders"
+          class="w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-200 cursor-pointer relative group"
+          :class="[
+            route.path.startsWith('/orders') || route.path === '/upload' || route.path === '/export'
+              ? 'bg-slate-900 text-white shadow-sm shadow-slate-900/20'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100',
+          ]"
+          title="Daftar Pesanan"
+        >
+          <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+            />
+          </svg>
+        </RouterLink>
+
+        <!-- 2. Scan Barcode Icon -->
+        <RouterLink
+          to="/scan"
+          class="w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-200 cursor-pointer relative group"
+          :class="[
+            route.path === '/scan'
+              ? 'bg-slate-900 text-white shadow-sm shadow-slate-900/20'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100',
+          ]"
+          title="Scan Barcode USB"
+        >
+          <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"
+            />
+          </svg>
+          <span class="absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-emerald-500"></span>
+        </RouterLink>
+      </div>
+
+      <!-- System Status (Expanded vs Collapsed) -->
       <div
+        v-if="!isCollapsed"
         class="p-3.5 mx-3 mb-4 rounded-xl bg-slate-50 border border-slate-200/70 text-[11px] text-slate-500"
       >
         <div class="flex items-center space-x-2 font-bold text-slate-700">
@@ -317,10 +434,22 @@ function closeMobile() {
           <span>Sistem Aktif</span>
         </div>
       </div>
+      <div
+        v-else
+        class="mb-4 flex items-center justify-center"
+        title="Sistem Aktif &amp; Terhubung"
+      >
+        <span class="relative flex h-2.5 w-2.5">
+          <span
+            class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"
+          ></span>
+          <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+        </span>
+      </div>
     </div>
 
-    <!-- Bottom User Profile & Logout -->
-    <div class="p-4 border-t border-slate-200/80 bg-slate-50/60">
+    <!-- Bottom User Profile & Logout (Expanded) -->
+    <div v-if="!isCollapsed" class="p-4 border-t border-slate-200/80 bg-slate-50/60">
       <div class="flex items-center justify-between">
         <div class="flex items-center space-x-3 min-w-0">
           <div
@@ -355,6 +484,35 @@ function closeMobile() {
           </svg>
         </button>
       </div>
+    </div>
+
+    <!-- Bottom User Profile & Logout (Collapsed) -->
+    <div
+      v-else
+      class="p-3 border-t border-slate-200/80 bg-slate-50/60 flex flex-col items-center gap-2.5"
+    >
+      <div
+        class="w-9 h-9 rounded-full bg-slate-900 text-white font-bold flex items-center justify-center text-xs shrink-0 uppercase shadow-sm"
+        :title="`${user?.username ?? 'Admin'} (${user?.role === 'admin' ? 'Administrator' : 'Operator'})`"
+      >
+        {{ user?.username ? user.username.slice(0, 2) : 'EL' }}
+      </div>
+      <button
+        type="button"
+        @click="handleLogout"
+        class="p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+        title="Keluar dari sistem"
+        aria-label="Keluar dari sistem"
+      >
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+          />
+        </svg>
+      </button>
     </div>
   </aside>
 </template>

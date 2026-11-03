@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, nextTick } from 'vue';
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
 import { api, ApiError } from '../api/client';
 
 interface OrderItem {
@@ -89,10 +89,88 @@ const stats = ref<ScanStats | null>(null);
 const errorMessage = ref<string | null>(null);
 const toastMessage = ref<string | null>(null);
 
+// Modal Konfirmasi Bersihkan Riwayat Log Scan (dengan Password)
+const showClearLogsModal = ref(false);
+const clearPassword = ref('');
+const clearError = ref<string | null>(null);
+const isClearingLogs = ref(false);
+const clearPasswordInput = ref<HTMLInputElement | null>(null);
+
+function openClearLogsModal() {
+  clearPassword.value = '';
+  clearError.value = null;
+  showClearLogsModal.value = true;
+  setTimeout(() => {
+    clearPasswordInput.value?.focus();
+  }, 60);
+}
+
+function closeClearLogsModal() {
+  showClearLogsModal.value = false;
+  clearPassword.value = '';
+  clearError.value = null;
+  focusInput();
+}
+
+async function submitClearLogs() {
+  if (!clearPassword.value.trim()) {
+    clearError.value = 'Password konfirmasi wajib diisi';
+    return;
+  }
+
+  isClearingLogs.value = true;
+  clearError.value = null;
+
+  try {
+    const res = await api.post<{ success: boolean; message: string }>('/api/scan/clear-logs', {
+      password: clearPassword.value,
+    });
+
+    closeClearLogsModal();
+    toastMessage.value = res.message || 'Riwayat scan berhasil dibersihkan.';
+    await loadLogsAndStats();
+
+    setTimeout(() => {
+      if (toastMessage.value?.includes('dibersihkan')) {
+        toastMessage.value = null;
+      }
+    }, 4000);
+  } catch (err: unknown) {
+    if (err instanceof ApiError) {
+      clearError.value = err.message;
+    } else {
+      clearError.value = 'Gagal membersihkan riwayat scan. Pastikan password benar.';
+    }
+  } finally {
+    isClearingLogs.value = false;
+  }
+}
+
 function focusInput() {
+  if (showModal.value || showClearLogsModal.value) return;
   nextTick(() => {
-    barcodeInput.value?.focus();
+    if (!showModal.value && !showClearLogsModal.value) {
+      barcodeInput.value?.focus();
+    }
   });
+}
+
+function onBarcodeBlur() {
+  if (showModal.value || showClearLogsModal.value) return;
+  setTimeout(() => {
+    if (showModal.value || showClearLogsModal.value) return;
+    const activeEl = document.activeElement;
+    if (
+      activeEl &&
+      (activeEl.tagName === 'INPUT' ||
+        activeEl.tagName === 'BUTTON' ||
+        activeEl.tagName === 'SELECT' ||
+        activeEl.tagName === 'TEXTAREA')
+    ) {
+      return;
+    }
+    barcodeInput.value?.focus();
+  }, 100);
 }
 
 // Web Audio API beep
@@ -276,17 +354,36 @@ function formatDate(dateStr: string | null) {
 
 // Keyboard shortcuts
 function handleGlobalKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape' && showModal.value) {
-    closeModal();
-    return;
+  if (e.key === 'Escape') {
+    if (showClearLogsModal.value) {
+      closeClearLogsModal();
+      return;
+    }
+    if (showModal.value) {
+      closeModal();
+      return;
+    }
   }
-  // If Enter pressed while modal is open, quickly dismiss modal to continue scanning
+
+  // If Enter pressed while scan result modal is open, quickly dismiss modal to continue scanning
   if (e.key === 'Enter' && showModal.value) {
     closeModal();
     return;
   }
-  // Auto focus input if user starts scanning/typing
-  if (!showModal.value && document.activeElement !== barcodeInput.value) {
+
+  // Jika modal pembersihan riwayat sedang terbuka, biarkan user mengetik password tanpa gangguan
+  if (showClearLogsModal.value) {
+    return;
+  }
+
+  // Jika fokus sedang berada di input/textarea/select lain, jangan rebut fokus
+  const activeTag = document.activeElement?.tagName;
+  if (activeTag === 'INPUT' || activeTag === 'TEXTAREA' || activeTag === 'SELECT') {
+    return;
+  }
+
+  // Auto focus input barcode jika user mulai mengetik/scan saat tidak ada modal aktif
+  if (!showModal.value && !showClearLogsModal.value && document.activeElement !== barcodeInput.value) {
     if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
       barcodeInput.value?.focus();
     }
@@ -525,7 +622,7 @@ onUnmounted(() => {
                 autocomplete="off"
                 placeholder="Scan barcode"
                 :disabled="isScanning"
-                @blur="focusInput"
+                @blur="onBarcodeBlur"
                 class="w-full text-lg font-mono font-bold tracking-wider px-4 py-3.5 bg-white border-2 rounded-2xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-4 transition-all"
                 :class="
                   currentMode === 'packing'
@@ -613,7 +710,9 @@ onUnmounted(() => {
 
     <!-- Recent Scan Logs Table -->
     <div class="bg-white border border-slate-200/80 rounded-2xl overflow-hidden shadow-sm">
-      <div class="px-6 py-4 border-b border-slate-200/80 flex items-center justify-between">
+      <div
+        class="px-6 py-4 border-b border-slate-200/80 flex items-center justify-between"
+      >
         <div class="flex items-center gap-2">
           <h2 class="text-sm font-bold text-slate-900 uppercase tracking-wider">
             Riwayat Scan Terkini
@@ -624,21 +723,44 @@ onUnmounted(() => {
             {{ recentLogs.length }}
           </span>
         </div>
-        <button
-          type="button"
-          @click="loadLogsAndStats"
-          class="text-xs text-slate-600 hover:text-slate-900 font-bold inline-flex items-center gap-1 cursor-pointer transition"
-        >
-          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-            />
-          </svg>
-          Segarkan Log
-        </button>
+
+        <div class="flex items-center gap-2">
+          <!-- Tombol Bersihkan Riwayat (dengan Konfirmasi Password) -->
+          <button
+            type="button"
+            @click="openClearLogsModal"
+            :disabled="recentLogs.length === 0"
+            class="text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 border border-rose-200 font-bold inline-flex items-center gap-1.5 cursor-pointer transition px-3 py-1.5 rounded-xl disabled:opacity-40 disabled:cursor-not-allowed"
+            title="Bersihkan seluruh riwayat scan barcode"
+          >
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+              />
+            </svg>
+            <span>Bersihkan Riwayat</span>
+          </button>
+
+          <!-- Tombol Segarkan -->
+          <button
+            type="button"
+            @click="loadLogsAndStats"
+            class="text-xs text-slate-600 hover:text-slate-900 font-bold inline-flex items-center gap-1 cursor-pointer transition px-2.5 py-1.5 rounded-xl hover:bg-slate-100"
+          >
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+              />
+            </svg>
+            <span>Segarkan</span>
+          </button>
+        </div>
       </div>
 
       <div class="overflow-x-auto">
@@ -657,7 +779,7 @@ onUnmounted(() => {
           <tbody class="divide-y divide-slate-100">
             <tr v-if="recentLogs.length === 0">
               <td colspan="7" class="px-6 py-10 text-center text-slate-400 font-medium">
-                Belum ada data scan pada sesi ini. Arahkan barcode scanner ke label resi.
+                Belum ada data riwayat scan. Arahkan barcode scanner ke label resi.
               </td>
             </tr>
             <tr
@@ -1015,6 +1137,78 @@ onUnmounted(() => {
           </div>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- Modal Konfirmasi Bersihkan Riwayat Scan (dengan Password) -->
+  <div
+    v-if="showClearLogsModal"
+    class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in"
+    @click.self="closeClearLogsModal"
+  >
+    <div
+      class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200/80 space-y-4 animate-scale-up"
+    >
+      <div class="flex items-center space-x-3">
+        <div
+          class="w-10 h-10 rounded-2xl bg-rose-50 text-rose-600 border border-rose-200/70 flex items-center justify-center shrink-0"
+        >
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+            />
+          </svg>
+        </div>
+        <div>
+          <h3 class="text-base font-black text-slate-900">Bersihkan Riwayat Scan</h3>
+          <p class="text-xs text-slate-500 font-medium">Konfirmasi password akun login</p>
+        </div>
+      </div>
+
+      <p class="text-xs text-slate-600 leading-relaxed">
+        Tindakan ini akan menghapus seluruh data baris riwayat scan barcode dari database agar tampilan tabel kembali kosong dan bersih. Status paket yang sudah dikemas/dikirim tetap tersimpan aman pada data pesanan.
+      </p>
+
+      <form @submit.prevent="submitClearLogs" class="space-y-4">
+        <div>
+          <label class="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+            Masukkan Password Akun Anda *
+          </label>
+          <input
+            ref="clearPasswordInput"
+            v-model="clearPassword"
+            type="password"
+            required
+            placeholder="Ketik password untuk konfirmasi..."
+            class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-bold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-rose-500 transition"
+          />
+          <p v-if="clearError" class="text-xs font-semibold text-rose-600 mt-1.5">
+            {{ clearError }}
+          </p>
+        </div>
+
+        <div class="flex items-center justify-end space-x-2 pt-3 border-t border-slate-100">
+          <button
+            type="button"
+            @click="closeClearLogsModal"
+            :disabled="isClearingLogs"
+            class="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+          >
+            Batal
+          </button>
+          <button
+            type="submit"
+            :disabled="isClearingLogs || !clearPassword.trim()"
+            class="px-5 py-2 text-xs font-bold bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white rounded-xl transition shadow-md shadow-rose-600/20 flex items-center space-x-1.5 cursor-pointer disabled:opacity-50"
+          >
+            <span v-if="isClearingLogs">Menghapus...</span>
+            <span v-else>Konfirmasi &amp; Bersihkan</span>
+          </button>
+        </div>
+      </form>
     </div>
   </div>
 </template>

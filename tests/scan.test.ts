@@ -1,7 +1,14 @@
+import bcrypt from 'bcryptjs';
 import { describe, expect, it, beforeAll } from 'vitest';
 import { db } from '../server/src/db/client.js';
 import { batches, orders, order_items, users, scan_logs } from '../server/src/db/schema.js';
-import { processScan, undoScan, getRecentScanLogs, getScanStats } from '../server/src/services/scanService.js';
+import {
+  processScan,
+  undoScan,
+  getRecentScanLogs,
+  getScanStats,
+  clearScanLogs,
+} from '../server/src/services/scanService.js';
 import { eq } from 'drizzle-orm';
 
 describe('Scan Service (server/src/services/scanService.ts)', () => {
@@ -11,17 +18,20 @@ describe('Scan Service (server/src/services/scanService.ts)', () => {
   const testResi2 = 'TEST-RESI-SHIPPING-02';
 
   beforeAll(async () => {
-    // Pastikan user test ada
+    // Pastikan user test ada dengan password hash bcrypt yang valid
+    const passwordHash = await bcrypt.hash('admin123', 10);
     let [user] = await db.select().from(users).where(eq(users.username, 'admin')).limit(1);
     if (!user) {
       [user] = await db
         .insert(users)
         .values({
           username: 'admin',
-          password_hash: 'hashed_password',
+          password_hash: passwordHash,
           role: 'admin',
         })
         .returning();
+    } else {
+      await db.update(users).set({ password_hash: passwordHash }).where(eq(users.id, user.id));
     }
     testUserId = user.id;
 
@@ -209,5 +219,22 @@ describe('Scan Service (server/src/services/scanService.ts)', () => {
     const stats = await getScanStats();
     expect(stats.totalLogs).toBeGreaterThan(0);
     expect(stats.totalOrders).toBeGreaterThan(0);
+  });
+
+  it('rejects clearScanLogs when password does not match', async () => {
+    await expect(clearScanLogs(testUserId, 'wrong-password')).rejects.toThrow(
+      'Password konfirmasi salah'
+    );
+  });
+
+  it('clears all scan logs successfully with correct password', async () => {
+    const res = await clearScanLogs(testUserId, 'admin123');
+    expect(res.success).toBe(true);
+
+    const logsAfter = await getRecentScanLogs(10);
+    expect(logsAfter).toHaveLength(0);
+
+    const statsAfter = await getScanStats();
+    expect(statsAfter.totalLogs).toBe(0);
   });
 });

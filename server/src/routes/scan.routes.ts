@@ -6,6 +6,7 @@ import {
   undoScan,
   getRecentScanLogs,
   getScanStats,
+  clearScanLogs,
 } from '../services/scanService.js';
 
 export const scanRouter = Router();
@@ -72,6 +73,23 @@ scanRouter.get('/stats', requireAuth, async (_req, res, next) => {
   try {
     const stats = await getScanStats();
     res.json({ stats });
+  } catch (err) {
+    next(err);
+  }
+});
+
+const clearLogsSchema = z.object({
+  password: z.string().min(1, 'Password konfirmasi wajib diisi'),
+});
+
+// POST /api/scan/clear-logs - Hapus seluruh riwayat log scan dengan verifikasi password
+scanRouter.post('/clear-logs', requireAuth, async (req, res, next) => {
+  try {
+    const parsed = clearLogsSchema.parse(req.body);
+    const userId = req.session.user!.id;
+
+    const result = await clearScanLogs(userId, parsed.password);
+    res.json(result);
   } catch (err) {
     next(err);
   }

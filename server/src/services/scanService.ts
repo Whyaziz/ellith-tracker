@@ -1,3 +1,4 @@
+import bcrypt from 'bcryptjs';
 import { eq, desc } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import { orders, order_items, scan_logs, users } from '../db/schema.js';
@@ -60,6 +61,29 @@ export async function processScan(input: ScanInput): Promise<ScanResponse> {
     .select()
     .from(order_items)
     .where(eq(order_items.order_id, order.id));
+
+  // 1.5 Cek jika pesanan telah dibatalkan (Cancel)
+  if (order.status === 'dibatalkan') {
+    const [log] = await db
+      .insert(scan_logs)
+      .values({
+        order_id: order.id,
+        resi_scanned: cleanedResi,
+        mode: input.mode,
+        result: 'status_tidak_valid',
+        user_id: input.userId,
+        scanned_at: new Date().toISOString(),
+      })
+      .returning();
+
+    return {
+      logId: log.id,
+      result: 'status_tidak_valid',
+      message: `PERINGATAN: Resi "${cleanedResi}" TELAH DIBATALKAN (CANCEL)! Harap bongkar paket dan kembalikan produk ke rak stok.`,
+      order,
+      items,
+    };
+  }
 
   // 2. Mode SCAN: PACKING
   if (input.mode === 'packing') {
@@ -334,4 +358,27 @@ export async function getScanStats() {
   };
 
   return stats;
+}
+
+export async function clearScanLogs(userId: number, password: string) {
+  if (!password || !password.trim()) {
+    throw new Error('Password konfirmasi wajib diisi');
+  }
+
+  const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+  if (!user) {
+    throw new Error('Pengguna tidak ditemukan');
+  }
+
+  const isMatch = await bcrypt.compare(password, user.password_hash);
+  if (!isMatch) {
+    throw new Error('Password konfirmasi salah. Pembersihan riwayat scan dibatalkan.');
+  }
+
+  await db.delete(scan_logs);
+
+  return {
+    success: true,
+    message: 'Seluruh riwayat log scan berhasil dibersihkan.',
+  };
 }

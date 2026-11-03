@@ -1,7 +1,10 @@
-import { eq, desc, and, or, like } from 'drizzle-orm';
+import fs from 'node:fs';
+import path from 'node:path';
+import { eq, desc, and, or, like, inArray, sql } from 'drizzle-orm';
 import { db } from '../db/client.js';
-import { batches, orders, order_items } from '../db/schema.js';
+import { batches, orders, order_items, scan_logs } from '../db/schema.js';
 import { parseJtPdf, type ParsedOrder } from '../parsers/jnt.js';
+import { config } from '../config.js';
 
 export interface DuplicateInfo {
   batch_id: number;
@@ -315,11 +318,14 @@ export async function getBatches() {
 
 export async function getOrders(filters: {
   batchId?: number;
-  status?: 'menunggu_dikemas' | 'dikemas' | 'dikirim';
+  status?: 'menunggu_dikemas' | 'dikemas' | 'dikirim' | 'dibatalkan';
   isPacked?: boolean;
   isShipped?: boolean;
   needsReview?: boolean;
   search?: string;
+  date?: string;
+  startDate?: string;
+  endDate?: string;
 }) {
   const conditions = [];
 
@@ -337,6 +343,33 @@ export async function getOrders(filters: {
   }
   if (filters.needsReview !== undefined) {
     conditions.push(eq(orders.needs_review, filters.needsReview));
+  }
+  if (filters.date) {
+    const ymd = filters.date.trim();
+    const parts = ymd.split('-');
+    if (parts.length === 3) {
+      const dmy = `${parts[2]}-${parts[1]}-${parts[0]}`;
+      conditions.push(
+        or(
+          like(orders.created_at, `${ymd}%`),
+          eq(orders.ship_date, dmy)
+        )
+      );
+    } else {
+      conditions.push(like(orders.created_at, `${ymd}%`));
+    }
+  }
+  if (filters.startDate) {
+    const startYmd = filters.startDate.trim();
+    conditions.push(
+      sql`(${orders.created_at} >= ${startYmd + ' 00:00:00'} OR (${orders.ship_date} IS NOT NULL AND (substr(${orders.ship_date}, 7, 4) || '-' || substr(${orders.ship_date}, 4, 2) || '-' || substr(${orders.ship_date}, 1, 2)) >= ${startYmd}))`
+    );
+  }
+  if (filters.endDate) {
+    const endYmd = filters.endDate.trim();
+    conditions.push(
+      sql`(${orders.created_at} <= ${endYmd + ' 23:59:59'} OR (${orders.ship_date} IS NOT NULL AND (substr(${orders.ship_date}, 7, 4) || '-' || substr(${orders.ship_date}, 4, 2) || '-' || substr(${orders.ship_date}, 1, 2)) <= ${endYmd}))`
+    );
   }
   if (filters.search) {
     const term = `%${filters.search.trim()}%`;
@@ -393,4 +426,258 @@ export async function getOrderByResi(resi: string) {
     ...order,
     items,
   };
+}
+
+export async function getOrderById(id: number) {
+  const [order] = await db
+    .select()
+    .from(orders)
+    .where(eq(orders.id, id))
+    .limit(1);
+
+  if (!order) return null;
+
+  const items = await db
+    .select()
+    .from(order_items)
+    .where(eq(order_items.order_id, order.id));
+
+  return {
+    ...order,
+    items,
+  };
+}
+
+export async function updateBatch(id: number, input: { name: string }) {
+  const [batch] = await db.select().from(batches).where(eq(batches.id, id)).limit(1);
+  if (!batch) {
+    throw new Error(`Batch dengan ID #${id} tidak ditemukan`);
+  }
+
+  const [updated] = await db
+    .update(batches)
+    .set({ name: input.name })
+    .where(eq(batches.id, id))
+    .returning();
+
+  return updated;
+}
+
+export async function deleteBatch(id: number) {
+  const [batch] = await db.select().from(batches).where(eq(batches.id, id)).limit(1);
+  if (!batch) {
+    throw new Error(`Batch dengan ID #${id} tidak ditemukan`);
+  }
+
+  // Cari semua ID pesanan di dalam batch ini
+  const batchOrders = await db
+    .select({ id: orders.id })
+    .from(orders)
+    .where(eq(orders.batch_id, id));
+  const orderIds = batchOrders.map((o) => o.id);
+
+  if (orderIds.length > 0) {
+    // 1. Hapus rincian item barang pesanan
+    await db.delete(order_items).where(inArray(order_items.order_id, orderIds));
+
+    // 2. Putuskan relasi scan_logs agar log riwayat scan tetap tersimpan
+    await db.update(scan_logs).set({ order_id: null }).where(inArray(scan_logs.order_id, orderIds));
+
+    // 3. Hapus data pesanan
+    await db.delete(orders).where(eq(orders.batch_id, id));
+  }
+
+  // 4. Hapus data batch
+  await db.delete(batches).where(eq(batches.id, id));
+
+  // 5. Hapus file fisik PDF jika ada (hanya jika berada di dalam folder upload data/pdf)
+  if (batch.pdf_path) {
+    try {
+      const resolvedPath = path.resolve(batch.pdf_path);
+      const pdfUploadDir = path.resolve(config.paths.pdfDir);
+      // Cegah penghapusan jika file berada di luar direktori pdf upload (misal file fixture di docs)
+      if (resolvedPath.startsWith(pdfUploadDir) && fs.existsSync(resolvedPath)) {
+        fs.unlinkSync(resolvedPath);
+      }
+    } catch {
+      // Abaikan jika file tidak dapat dihapus
+    }
+  }
+
+  return { success: true, deletedOrdersCount: orderIds.length };
+}
+
+export interface UpdateOrderItemInput {
+  id?: number;
+  product_name: string;
+  sku: string;
+  seller_sku?: string | null;
+  qty: number;
+}
+
+export interface UpdateOrderInput {
+  resi?: string;
+  order_id?: string;
+  courier?: string;
+  service?: string;
+  is_cod?: boolean;
+  weight_kg?: number;
+  ship_date?: string | null;
+  recipient_name?: string;
+  recipient_phone?: string | null;
+  recipient_address?: string;
+  sorting_code?: string | null;
+  needs_review?: boolean;
+  validation_notes?: string | null;
+  items?: UpdateOrderItemInput[];
+}
+
+export async function updateOrder(id: number, input: UpdateOrderInput) {
+  const [order] = await db.select().from(orders).where(eq(orders.id, id)).limit(1);
+  if (!order) {
+    throw new Error(`Pesanan dengan ID #${id} tidak ditemukan`);
+  }
+
+  // Jika resi diubah, pastikan tidak bertabrakan dengan resi lain
+  if (input.resi && input.resi.trim() !== order.resi) {
+    const [existing] = await db
+      .select({ id: orders.id })
+      .from(orders)
+      .where(eq(orders.resi, input.resi.trim()))
+      .limit(1);
+
+    if (existing && existing.id !== id) {
+      throw new Error(`Resi "${input.resi.trim()}" sudah digunakan pada pesanan lain`);
+    }
+  }
+
+  const updateFields: Partial<typeof orders.$inferInsert> = {};
+  if (input.resi !== undefined) updateFields.resi = input.resi.trim();
+  if (input.order_id !== undefined) updateFields.order_id = input.order_id.trim();
+  if (input.courier !== undefined) updateFields.courier = input.courier.trim();
+  if (input.service !== undefined) updateFields.service = input.service.trim();
+  if (input.is_cod !== undefined) updateFields.is_cod = input.is_cod;
+  if (input.weight_kg !== undefined) updateFields.weight_kg = input.weight_kg;
+  if (input.ship_date !== undefined) {
+    updateFields.ship_date = input.ship_date ? input.ship_date.trim() : null;
+  }
+  if (input.recipient_name !== undefined) updateFields.recipient_name = input.recipient_name.trim();
+  if (input.recipient_phone !== undefined) {
+    updateFields.recipient_phone = input.recipient_phone ? input.recipient_phone.trim() : null;
+  }
+  if (input.recipient_address !== undefined) {
+    updateFields.recipient_address = input.recipient_address.trim();
+  }
+  if (input.sorting_code !== undefined) {
+    updateFields.sorting_code = input.sorting_code ? input.sorting_code.trim() : null;
+  }
+  if (input.needs_review !== undefined) updateFields.needs_review = input.needs_review;
+  if (input.validation_notes !== undefined) updateFields.validation_notes = input.validation_notes;
+
+  // Update item list jika diberikan
+  if (input.items && Array.isArray(input.items)) {
+    if (input.items.length === 0) {
+      throw new Error('Pesanan harus memiliki minimal 1 barang');
+    }
+
+    let calculatedQtyTotal = 0;
+    for (const item of input.items) {
+      if (!item.product_name || !item.product_name.trim()) {
+        throw new Error('Nama produk tidak boleh kosong');
+      }
+      if (!item.sku || !item.sku.trim()) {
+        throw new Error('SKU produk tidak boleh kosong');
+      }
+      if (typeof item.qty !== 'number' || item.qty <= 0) {
+        throw new Error('Kuantitas (Qty) barang harus lebih besar dari 0');
+      }
+      calculatedQtyTotal += item.qty;
+    }
+
+    // Ganti rincian items lama dengan yang baru
+    await db.delete(order_items).where(eq(order_items.order_id, id));
+    await db.insert(order_items).values(
+      input.items.map((it) => ({
+        order_id: id,
+        product_name: it.product_name.trim(),
+        sku: it.sku.trim(),
+        seller_sku: it.seller_sku ? it.seller_sku.trim() : null,
+        qty: it.qty,
+      }))
+    );
+
+    updateFields.qty_total = calculatedQtyTotal;
+  }
+
+  if (Object.keys(updateFields).length > 0) {
+    await db.update(orders).set(updateFields).where(eq(orders.id, id));
+  }
+
+  return await getOrderById(id);
+}
+
+export async function deleteOrder(id: number) {
+  const [order] = await db.select().from(orders).where(eq(orders.id, id)).limit(1);
+  if (!order) {
+    throw new Error(`Pesanan dengan ID #${id} tidak ditemukan`);
+  }
+
+  // 1. Hapus item barang pesanan
+  await db.delete(order_items).where(eq(order_items.order_id, id));
+
+  // 2. Putuskan relasi scan_logs
+  await db.update(scan_logs).set({ order_id: null }).where(eq(scan_logs.order_id, id));
+
+  // 3. Hapus pesanan
+  await db.delete(orders).where(eq(orders.id, id));
+
+  // 4. Kurangi total_orders di tabel batches
+  await db
+    .update(batches)
+    .set({
+      total_orders: sql`MAX(0, ${batches.total_orders} - 1)`,
+    })
+    .where(eq(batches.id, order.batch_id));
+
+  return { success: true, deletedResi: order.resi, batchId: order.batch_id };
+}
+
+export async function cancelOrder(id: number) {
+  const [order] = await db.select().from(orders).where(eq(orders.id, id)).limit(1);
+  if (!order) {
+    throw new Error(`Pesanan dengan ID #${id} tidak ditemukan`);
+  }
+
+  const [updated] = await db
+    .update(orders)
+    .set({
+      status: 'dibatalkan',
+    })
+    .where(eq(orders.id, id))
+    .returning();
+
+  return await getOrderById(updated.id);
+}
+
+export async function restoreOrder(id: number) {
+  const [order] = await db.select().from(orders).where(eq(orders.id, id)).limit(1);
+  if (!order) {
+    throw new Error(`Pesanan dengan ID #${id} tidak ditemukan`);
+  }
+
+  const restoredStatus = order.is_shipped
+    ? 'dikirim'
+    : order.is_packed
+      ? 'dikemas'
+      : 'menunggu_dikemas';
+
+  const [updated] = await db
+    .update(orders)
+    .set({
+      status: restoredStatus,
+    })
+    .where(eq(orders.id, id))
+    .returning();
+
+  return await getOrderById(updated.id);
 }

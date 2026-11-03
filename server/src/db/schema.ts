@@ -52,7 +52,7 @@ export const orders = sqliteTable(
     recipient_address: text('recipient_address').notNull(),
     sorting_code: text('sorting_code'),
     status: text('status', {
-      enum: ['menunggu_dikemas', 'dikemas', 'dikirim'],
+      enum: ['menunggu_dikemas', 'dikemas', 'dikirim', 'dibatalkan'],
     })
       .notNull()
       .default('menunggu_dikemas'),

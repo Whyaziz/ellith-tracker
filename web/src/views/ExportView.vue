@@ -45,7 +45,9 @@ const isLoading = ref(false);
 const isExporting = ref(false);
 
 const selectedBatchId = ref<number | ''>('');
-const selectedStatus = ref<'all' | 'unpacked' | 'packed' | 'shipped'>('all');
+const startDate = ref('');
+const endDate = ref('');
+const selectedStatus = ref<'all' | 'unpacked' | 'packed' | 'shipped' | 'cancelled'>('all');
 
 async function fetchBatches() {
   try {
@@ -63,6 +65,12 @@ async function fetchOrders() {
     if (selectedBatchId.value !== '') {
       params.append('batch_id', selectedBatchId.value.toString());
     }
+    if (startDate.value) {
+      params.append('start_date', startDate.value);
+    }
+    if (endDate.value) {
+      params.append('end_date', endDate.value);
+    }
     const res = await api.get<{ orders: Order[]; total: number }>(`/api/orders?${params.toString()}`);
     orders.value = res.orders;
   } catch (err) {
@@ -72,11 +80,38 @@ async function fetchOrders() {
   }
 }
 
+function getOrderDateYmd(order: Order): string {
+  if (order.ship_date) {
+    const parts = order.ship_date.split('-');
+    if (parts.length === 3) {
+      return `${parts[2]}-${parts[1]}-${parts[0]}`;
+    }
+  }
+  if (order.created_at) {
+    return order.created_at.slice(0, 10);
+  }
+  return '';
+}
+
 const filteredOrders = computed(() => {
   return orders.value.filter((o) => {
-    if (selectedStatus.value === 'unpacked') return !o.is_packed;
-    if (selectedStatus.value === 'packed') return o.is_packed && !o.is_shipped;
-    if (selectedStatus.value === 'shipped') return o.is_shipped;
+    if (selectedStatus.value === 'unpacked') {
+      if (o.status === 'dibatalkan' || o.is_packed) return false;
+    } else if (selectedStatus.value === 'packed') {
+      if (o.status === 'dibatalkan' || !o.is_packed || o.is_shipped) return false;
+    } else if (selectedStatus.value === 'shipped') {
+      if (o.status === 'dibatalkan' || !o.is_shipped) return false;
+    } else if (selectedStatus.value === 'cancelled') {
+      if (o.status !== 'dibatalkan') return false;
+    }
+
+    if (startDate.value || endDate.value) {
+      const orderYmd = getOrderDateYmd(o);
+      if (!orderYmd) return false;
+      if (startDate.value && orderYmd < startDate.value) return false;
+      if (endDate.value && orderYmd > endDate.value) return false;
+    }
+
     return true;
   });
 });
@@ -87,6 +122,7 @@ function exportToCsv() {
     const headers = [
       'No. Resi',
       'Order ID',
+      'Tanggal Pesanan',
       'Kurir',
       'Layanan',
       'COD',
@@ -95,6 +131,7 @@ function exportToCsv() {
       'No. Telepon',
       'Alamat Penerima',
       'Kode Sortir',
+      'Status Pesanan',
       'Status Packing',
       'Waktu Packing',
       'Status Pengiriman',
@@ -109,11 +146,21 @@ function exportToCsv() {
     const rows: string[][] = [];
 
     for (const ord of filteredOrders.value) {
+      const statusLabel =
+        ord.status === 'dibatalkan'
+          ? 'Dibatalkan'
+          : ord.is_shipped
+            ? 'Dikirim'
+            : ord.is_packed
+              ? 'Dikemas'
+              : 'Menunggu Dikemas';
+
       if (ord.items && ord.items.length > 0) {
         for (const item of ord.items) {
           rows.push([
             ord.resi,
             ord.order_id,
+            ord.ship_date ?? '',
             ord.courier,
             ord.service,
             ord.is_cod ? 'COD' : 'NON-COD',
@@ -122,6 +169,7 @@ function exportToCsv() {
             ord.recipient_phone ?? '',
             ord.recipient_address.replace(/\n|\r/g, ' '),
             ord.sorting_code ?? '',
+            statusLabel,
             ord.is_packed ? 'Sudah Dikemas' : 'Belum Dikemas',
             ord.packed_at ?? '',
             ord.is_shipped ? 'Sudah Dikirim' : 'Belum Dikirim',
@@ -137,6 +185,7 @@ function exportToCsv() {
         rows.push([
           ord.resi,
           ord.order_id,
+          ord.ship_date ?? '',
           ord.courier,
           ord.service,
           ord.is_cod ? 'COD' : 'NON-COD',
@@ -145,6 +194,7 @@ function exportToCsv() {
           ord.recipient_phone ?? '',
           ord.recipient_address.replace(/\n|\r/g, ' '),
           ord.sorting_code ?? '',
+          statusLabel,
           ord.is_packed ? 'Sudah Dikemas' : 'Belum Dikemas',
           ord.packed_at ?? '',
           ord.is_shipped ? 'Sudah Dikirim' : 'Belum Dikirim',
@@ -216,7 +266,7 @@ onMounted(async () => {
 
     <!-- Export Configuration Card -->
     <div class="bg-white border border-slate-200/80 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6">
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
         <!-- Batch Filter -->
         <div>
           <label class="block text-xs font-bold uppercase tracking-wider text-slate-700">Pilih Batch Upload</label>
@@ -232,6 +282,37 @@ onMounted(async () => {
           </select>
         </div>
 
+        <!-- Tanggal Filter (Date Range) -->
+        <div>
+          <div class="flex items-center justify-between">
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-700">Filter Rentang Tanggal</label>
+            <button
+              v-if="startDate || endDate"
+              type="button"
+              @click="startDate = ''; endDate = ''; fetchOrders();"
+              class="text-[10px] text-blue-600 font-bold hover:underline cursor-pointer"
+            >
+              Reset
+            </button>
+          </div>
+          <div class="grid grid-cols-2 gap-2 mt-1.5">
+            <input
+              v-model="startDate"
+              type="date"
+              @change="fetchOrders"
+              title="Tanggal Mulai"
+              class="block w-full px-2.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900 cursor-pointer transition"
+            />
+            <input
+              v-model="endDate"
+              type="date"
+              @change="fetchOrders"
+              title="Tanggal Akhir"
+              class="block w-full px-2.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900 cursor-pointer transition"
+            />
+          </div>
+        </div>
+
         <!-- Status Filter -->
         <div>
           <label class="block text-xs font-bold uppercase tracking-wider text-slate-700">Filter Status Operasional</label>
@@ -243,6 +324,7 @@ onMounted(async () => {
             <option value="unpacked">Hanya yang Belum Dikemas</option>
             <option value="packed">Hanya yang Sudah Dikemas (Siap Kirim)</option>
             <option value="shipped">Hanya yang Sudah Dikirim (Diserahkan ke Kurir)</option>
+            <option value="cancelled">Hanya yang Dibatalkan (Cancel)</option>
           </select>
         </div>
       </div>

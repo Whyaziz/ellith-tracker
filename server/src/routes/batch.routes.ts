@@ -7,6 +7,8 @@ import {
   processAndSaveBatch,
   getBatches,
   previewBatch,
+  updateBatch,
+  deleteBatch,
   BatchValidationError,
 } from '../services/batchService.js';
 
@@ -118,3 +120,42 @@ batchRouter.post(
     }
   }
 );
+
+batchRouter.put('/:id', requireAuth, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (isNaN(id)) {
+      res.status(400).json({ error: 'ID batch tidak valid' });
+      return;
+    }
+
+    const { name } = req.body;
+    if (!name || typeof name !== 'string' || !name.trim()) {
+      res.status(400).json({ error: 'Nama batch tidak boleh kosong' });
+      return;
+    }
+
+    const updated = await updateBatch(id, { name: name.trim() });
+    res.json({ message: 'Nama batch berhasil diperbarui', batch: updated });
+  } catch (err) {
+    next(err);
+  }
+});
+
+batchRouter.delete('/:id', requireAuth, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (isNaN(id)) {
+      res.status(400).json({ error: 'ID batch tidak valid' });
+      return;
+    }
+
+    const result = await deleteBatch(id);
+    res.json({
+      message: `Batch #${id} beserta ${result.deletedOrdersCount} pesanan berhasil dihapus`,
+      deletedOrdersCount: result.deletedOrdersCount,
+    });
+  } catch (err) {
+    next(err);
+  }
+});

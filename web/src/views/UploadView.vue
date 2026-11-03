@@ -65,6 +65,68 @@ const lastUploadedBatch = ref<Batch | null>(null);
 const extractedOrders = ref<ParsedOrder[]>([]);
 const recentBatches = ref<Batch[]>([]);
 
+// Batch Edit & Delete State
+const editingBatch = ref<Batch | null>(null);
+const editBatchNameInput = ref('');
+const isSavingBatch = ref(false);
+
+const deletingBatch = ref<Batch | null>(null);
+const isDeletingBatch = ref(false);
+
+function openEditBatch(batch: Batch) {
+  editingBatch.value = batch;
+  editBatchNameInput.value = batch.name;
+}
+
+async function saveEditBatch() {
+  if (!editingBatch.value || !editBatchNameInput.value.trim()) return;
+  isSavingBatch.value = true;
+  try {
+    const res = await api.put<{ message: string; batch: Batch }>(`/api/batches/${editingBatch.value.id}`, {
+      name: editBatchNameInput.value.trim(),
+    });
+    const idx = recentBatches.value.findIndex((b) => b.id === editingBatch.value!.id);
+    if (idx !== -1) {
+      recentBatches.value[idx].name = res.batch.name;
+    }
+    editingBatch.value = null;
+  } catch (err: unknown) {
+    if (err instanceof ApiError) {
+      alert(`Gagal mengubah nama batch: ${err.message}`);
+    } else {
+      alert('Gagal mengubah nama batch');
+    }
+  } finally {
+    isSavingBatch.value = false;
+  }
+}
+
+function openDeleteBatch(batch: Batch) {
+  deletingBatch.value = batch;
+}
+
+async function confirmDeleteBatch() {
+  if (!deletingBatch.value) return;
+  isDeletingBatch.value = true;
+  try {
+    await api.delete(`/api/batches/${deletingBatch.value.id}`);
+    recentBatches.value = recentBatches.value.filter((b) => b.id !== deletingBatch.value!.id);
+    if (lastUploadedBatch.value?.id === deletingBatch.value.id) {
+      lastUploadedBatch.value = null;
+      extractedOrders.value = [];
+    }
+    deletingBatch.value = null;
+  } catch (err: unknown) {
+    if (err instanceof ApiError) {
+      alert(`Gagal menghapus batch: ${err.message}`);
+    } else {
+      alert('Gagal menghapus batch');
+    }
+  } finally {
+    isDeletingBatch.value = false;
+  }
+}
+
 async function generatePreview(selectedFile: File) {
   isPreviewing.value = true;
   errorMessage.value = '';
@@ -596,17 +658,143 @@ onMounted(() => {
               </td>
               <td class="px-4 py-3 text-slate-500 font-mono">{{ formatDate(b.uploaded_at) }}</td>
               <td class="px-4 py-3 text-right">
-                <button
-                  type="button"
-                  @click="goToOrders(b.id)"
-                  class="text-xs font-bold text-slate-900 hover:underline cursor-pointer"
-                >
-                  Buka Pesanan &rarr;
-                </button>
+                <div class="flex items-center justify-end space-x-2">
+                  <button
+                    type="button"
+                    @click="goToOrders(b.id)"
+                    class="text-xs font-bold text-slate-800 hover:text-blue-600 cursor-pointer"
+                    title="Buka pesanan batch ini"
+                  >
+                    Buka &rarr;
+                  </button>
+                  <span class="text-slate-300">|</span>
+                  <button
+                    type="button"
+                    @click="openEditBatch(b)"
+                    class="text-xs font-bold text-slate-600 hover:text-slate-900 cursor-pointer"
+                    title="Ubah nama batch"
+                  >
+                    Ubah
+                  </button>
+                  <span class="text-slate-300">|</span>
+                  <button
+                    type="button"
+                    @click="openDeleteBatch(b)"
+                    class="text-xs font-bold text-rose-600 hover:text-rose-800 cursor-pointer"
+                    title="Hapus batch ini beserta semua pesanannya"
+                  >
+                    Hapus
+                  </button>
+                </div>
               </td>
             </tr>
           </tbody>
         </table>
+      </div>
+    </div>
+
+    <!-- MODAL EDIT NAMA BATCH -->
+    <div
+      v-if="editingBatch"
+      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div class="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-200 p-6 space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+          <h3 class="text-base font-bold text-slate-900">Ubah Nama Batch #{{ editingBatch.id }}</h3>
+          <button
+            type="button"
+            @click="editingBatch = null"
+            class="text-slate-400 hover:text-slate-600 p-1 rounded-lg cursor-pointer"
+          >
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold uppercase tracking-wider text-slate-700">Nama Batch Baru</label>
+          <input
+            v-model="editBatchNameInput"
+            type="text"
+            required
+            class="mt-1.5 block w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900"
+            placeholder="Masukkan nama batch..."
+            @keyup.enter="saveEditBatch"
+          />
+        </div>
+
+        <div class="flex justify-end space-x-2 pt-2">
+          <button
+            type="button"
+            @click="editingBatch = null"
+            class="px-4 py-2 border border-slate-200 text-slate-700 rounded-xl text-xs font-bold hover:bg-slate-50 transition cursor-pointer"
+          >
+            Batal
+          </button>
+          <button
+            type="button"
+            @click="saveEditBatch"
+            :disabled="isSavingBatch || !editBatchNameInput.trim()"
+            class="px-5 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 disabled:opacity-50 transition cursor-pointer flex items-center space-x-1.5"
+          >
+            <span v-if="isSavingBatch">Menyimpan...</span>
+            <span v-else>Simpan Perubahan</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL KONFIRMASI HAPUS BATCH -->
+    <div
+      v-if="deletingBatch"
+      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div class="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden border border-rose-200 p-6 space-y-4">
+        <div class="flex items-center space-x-3 text-rose-600">
+          <div class="w-10 h-10 rounded-2xl bg-rose-50 flex items-center justify-center shrink-0">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <div>
+            <h3 class="text-base font-bold text-slate-900">Hapus Batch #{{ deletingBatch.id }}?</h3>
+            <p class="text-xs text-slate-500 font-mono">{{ deletingBatch.name }}</p>
+          </div>
+        </div>
+
+        <div class="p-3.5 bg-rose-50/70 border border-rose-200 rounded-2xl text-xs text-rose-900 leading-relaxed">
+          <p class="font-bold">Peringatan Penghapusan:</p>
+          <p class="mt-1">
+            Seluruh <strong>{{ deletingBatch.total_orders }} pesanan</strong> beserta daftar item barang di dalam batch ini akan <strong>dihapus permanen</strong> dari sistem.
+          </p>
+          <p class="mt-1 text-[11px] text-rose-700">
+            Gunakan fitur ini jika Anda salah mengunggah file PDF atau ingin mengulang parsing dari awal.
+          </p>
+        </div>
+
+        <div class="flex justify-end space-x-2 pt-2">
+          <button
+            type="button"
+            @click="deletingBatch = null"
+            class="px-4 py-2 border border-slate-200 text-slate-700 rounded-xl text-xs font-bold hover:bg-slate-50 transition cursor-pointer"
+          >
+            Batal
+          </button>
+          <button
+            type="button"
+            @click="confirmDeleteBatch"
+            :disabled="isDeletingBatch"
+            class="px-5 py-2 bg-rose-600 text-white rounded-xl text-xs font-bold hover:bg-rose-700 disabled:opacity-50 transition cursor-pointer flex items-center space-x-1.5"
+          >
+            <span v-if="isDeletingBatch">Menghapus...</span>
+            <span v-else>Ya, Hapus Batch Ini</span>
+          </button>
+        </div>
       </div>
     </div>
   </div>
