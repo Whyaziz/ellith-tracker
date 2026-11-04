@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
 import { api } from '../api/client';
+import DateRangePicker from '../components/DateRangePicker.vue';
 
 interface Batch {
   id: number;
@@ -247,15 +248,15 @@ onMounted(async () => {
     <!-- Breadcrumb back link -->
     <div>
       <RouterLink
-        to="/orders"
+        to="/printed-orders"
         class="inline-flex items-center space-x-1.5 text-xs font-bold text-slate-600 hover:text-slate-900 transition cursor-pointer"
       >
-        <span>&larr; Kembali ke Daftar Pesanan</span>
+        <span>&larr; Kembali ke Resi Tercetak</span>
       </RouterLink>
 
       <div class="flex items-center space-x-2.5 mt-2">
-        <h1 class="text-2xl font-black text-slate-900 tracking-tight">Export Laporan Pesanan</h1>
-        <span class="text-[10px] font-black tracking-widest uppercase bg-slate-900 text-white px-2 py-0.5 rounded">
+        <h1 class="text-2xl font-bold text-slate-900 tracking-tight">Export Laporan Pesanan</h1>
+        <span class="text-[10px] font-bold tracking-widest uppercase bg-gradient-to-r from-indigo-600 to-indigo-700 text-white px-2.5 py-0.5 rounded shadow-xs">
           ELLITH
         </span>
       </div>
@@ -284,7 +285,7 @@ onMounted(async () => {
 
         <!-- Tanggal Filter (Date Range) -->
         <div>
-          <div class="flex items-center justify-between">
+          <div class="flex items-center justify-between mb-1.5">
             <label class="block text-xs font-bold uppercase tracking-wider text-slate-700">Filter Rentang Tanggal</label>
             <button
               v-if="startDate || endDate"
@@ -295,22 +296,12 @@ onMounted(async () => {
               Reset
             </button>
           </div>
-          <div class="grid grid-cols-2 gap-2 mt-1.5">
-            <input
-              v-model="startDate"
-              type="date"
-              @change="fetchOrders"
-              title="Tanggal Mulai"
-              class="block w-full px-2.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900 cursor-pointer transition"
-            />
-            <input
-              v-model="endDate"
-              type="date"
-              @change="fetchOrders"
-              title="Tanggal Akhir"
-              class="block w-full px-2.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900 cursor-pointer transition"
-            />
-          </div>
+          <DateRangePicker
+            v-model:startDate="startDate"
+            v-model:endDate="endDate"
+            placeholder="Pilih rentang tanggal ekspor..."
+            @change="fetchOrders"
+          />
         </div>
 
         <!-- Status Filter -->
@@ -342,7 +333,7 @@ onMounted(async () => {
           type="button"
           @click="exportToCsv"
           :disabled="isLoading || filteredOrders.length === 0 || isExporting"
-          class="px-6 py-3 bg-slate-900 hover:bg-slate-800 active:bg-black text-white rounded-xl text-xs font-bold shadow-md shadow-slate-900/10 transition flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-50"
+          class="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white rounded-xl text-xs font-bold shadow-sm shadow-indigo-500/25 transition flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-50"
         >
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />

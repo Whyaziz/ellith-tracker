@@ -410,9 +410,9 @@ onUnmounted(() => {
     >
       <div>
         <div class="flex items-center space-x-2.5">
-          <h1 class="text-2xl font-black text-slate-900 tracking-tight">Scan Barcode Resi</h1>
+          <h1 class="text-2xl font-bold text-slate-900 tracking-tight">Scan Barcode Resi</h1>
           <span
-            class="text-[10px] font-black tracking-widest uppercase bg-slate-900 text-white px-2 py-0.5 rounded"
+            class="text-[10px] font-bold tracking-widest uppercase bg-gradient-to-r from-indigo-600 to-indigo-700 text-white px-2.5 py-0.5 rounded shadow-xs"
           >
             ELLITH
           </span>
@@ -484,7 +484,7 @@ onUnmounted(() => {
             class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer"
             :class="
               currentMode === 'packing'
-                ? 'bg-slate-900 text-white shadow-sm'
+                ? 'bg-indigo-600 text-white shadow-xs'
                 : 'text-slate-600 hover:text-slate-900'
             "
           >
@@ -504,7 +504,7 @@ onUnmounted(() => {
             class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer"
             :class="
               currentMode === 'pengiriman'
-                ? 'bg-emerald-600 text-white shadow-sm'
+                ? 'bg-emerald-600 text-white shadow-xs'
                 : 'text-slate-600 hover:text-slate-900'
             "
           >
@@ -563,11 +563,11 @@ onUnmounted(() => {
 
     <!-- Active Scan Card & Input Box -->
     <div
-      class="rounded-3xl border-2 p-6 transition-all duration-200 shadow-sm"
+      class="rounded-3xl border-2 p-6 transition-all duration-200 shadow-xs"
       :class="
         currentMode === 'packing'
-          ? 'bg-slate-900/5 border-slate-300'
-          : 'bg-emerald-50/50 border-emerald-300'
+          ? 'bg-indigo-50/40 border-indigo-200'
+          : 'bg-emerald-50/40 border-emerald-200'
       "
     >
       <div class="flex flex-col md:flex-row items-center gap-6">
@@ -575,7 +575,7 @@ onUnmounted(() => {
         <div
           class="w-16 h-16 rounded-2xl flex items-center justify-center shrink-0 shadow-sm"
           :class="
-            currentMode === 'packing' ? 'bg-slate-900 text-white' : 'bg-emerald-600 text-white'
+            currentMode === 'packing' ? 'bg-indigo-600 text-white shadow-indigo-500/25' : 'bg-emerald-600 text-white shadow-emerald-500/25'
           "
         >
           <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -600,8 +600,8 @@ onUnmounted(() => {
                 class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider"
                 :class="
                   currentMode === 'packing'
-                    ? 'bg-slate-900 text-white'
-                    : 'bg-emerald-600 text-white'
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'bg-emerald-600 text-white shadow-xs'
                 "
               >
                 MODE {{ currentMode.toUpperCase() }}
@@ -626,7 +626,7 @@ onUnmounted(() => {
                 class="w-full text-lg font-mono font-bold tracking-wider px-4 py-3.5 bg-white border-2 rounded-2xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-4 transition-all"
                 :class="
                   currentMode === 'packing'
-                    ? 'border-slate-300 focus:border-slate-900 focus:ring-slate-900/10'
+                    ? 'border-indigo-300 focus:border-indigo-600 focus:ring-indigo-500/10'
                     : 'border-emerald-300 focus:border-emerald-600 focus:ring-emerald-500/10'
                 "
               />
@@ -648,11 +648,11 @@ onUnmounted(() => {
             <button
               type="submit"
               :disabled="isScanning || !barcodeQuery.trim()"
-              class="px-6 py-3.5 rounded-2xl text-white font-bold text-sm transition-all shadow-md flex items-center gap-2 shrink-0 disabled:opacity-50 cursor-pointer"
+              class="px-6 py-3.5 rounded-2xl text-white font-bold text-sm transition-all shadow-sm flex items-center gap-2 shrink-0 disabled:opacity-50 cursor-pointer"
               :class="
                 currentMode === 'packing'
-                  ? 'bg-slate-900 hover:bg-slate-800 active:bg-black shadow-slate-900/10'
-                  : 'bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 shadow-emerald-600/10'
+                  ? 'bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 shadow-indigo-500/25'
+                  : 'bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 shadow-emerald-500/25'
               "
             >
               <span>Scan</span>

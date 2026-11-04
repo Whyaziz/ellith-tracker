@@ -2,6 +2,8 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { api, ApiError } from '../api/client';
+import DateRangePicker from '../components/DateRangePicker.vue';
+import Pagination from '../components/Pagination.vue';
 
 interface Batch {
   id: number;
@@ -306,9 +308,12 @@ async function saveEditBatch() {
   if (!editingBatch.value || !editBatchName.value.trim()) return;
   isSavingBatch.value = true;
   try {
-    const res = await api.put<{ message: string; batch: Batch }>(`/api/batches/${editingBatch.value.id}`, {
-      name: editBatchName.value.trim(),
-    });
+    const res = await api.put<{ message: string; batch: Batch }>(
+      `/api/batches/${editingBatch.value.id}`,
+      {
+        name: editBatchName.value.trim(),
+      }
+    );
     const idx = batches.value.findIndex((b) => b.id === editingBatch.value!.id);
     if (idx !== -1) {
       batches.value[idx].name = res.batch.name;
@@ -417,7 +422,9 @@ const stats = computed(() => {
   const total = orders.value.length;
   const cancelled = orders.value.filter((o) => o.status === 'dibatalkan').length;
   const unpacked = orders.value.filter((o) => o.status !== 'dibatalkan' && !o.is_packed).length;
-  const packed = orders.value.filter((o) => o.status !== 'dibatalkan' && o.is_packed && !o.is_shipped).length;
+  const packed = orders.value.filter(
+    (o) => o.status !== 'dibatalkan' && o.is_packed && !o.is_shipped
+  ).length;
   const shipped = orders.value.filter((o) => o.status !== 'dibatalkan' && o.is_shipped).length;
   return { total, unpacked, packed, shipped, cancelled };
 });
@@ -477,6 +484,20 @@ const filteredOrders = computed(() => {
   });
 });
 
+// Pagination State
+const currentPage = ref(1);
+const pageSize = ref(25);
+
+const paginatedOrders = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value;
+  return filteredOrders.value.slice(start, start + pageSize.value);
+});
+
+// Reset ke halaman 1 saat filter atau pencarian berubah
+watch([searchQuery, selectedTab, selectedBatchId, startDate, endDate], () => {
+  currentPage.value = 1;
+});
+
 const isFilterActive = computed(() => {
   return (
     selectedTab.value !== 'all' ||
@@ -533,12 +554,10 @@ function formatDate(isoStr: string | null) {
   if (!isoStr) return '-';
   try {
     const d = new Date(isoStr);
-    return d.toLocaleString('id-ID', {
+    return d.toLocaleDateString('id-ID', {
       day: '2-digit',
       month: 'short',
       year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
     });
   } catch {
     return isoStr;
@@ -599,15 +618,16 @@ onUnmounted(() => {
     >
       <div>
         <div class="flex items-center space-x-2.5">
-          <h1 class="text-2xl font-black text-slate-900 tracking-tight">
-            Daftar Pesanan &amp; Status Resi
-          </h1>
+          <h1 class="text-2xl font-bold text-slate-900 tracking-tight">Resi Tercetak</h1>
           <span
-            class="text-[10px] font-black tracking-widest uppercase bg-slate-900 text-white px-2 py-0.5 rounded"
+            class="text-[10px] font-bold tracking-widest uppercase bg-gradient-to-r from-indigo-600 to-indigo-700 text-white px-2.5 py-0.5 rounded shadow-xs"
           >
             ELLITH
           </span>
         </div>
+        <p class="text-xs text-slate-500 mt-0.5">
+          Pelacakan &amp; Validasi Label Cetak PDF (TikTok Shop &bull; J&amp;T Express)
+        </p>
       </div>
 
       <!-- Action Buttons: Refresh, Export, + Upload -->
@@ -658,7 +678,7 @@ onUnmounted(() => {
 
         <RouterLink
           to="/upload"
-          class="whitespace-nowrap shrink-0 px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 active:bg-black transition shadow-sm shadow-slate-900/10 flex items-center space-x-1.5 cursor-pointer"
+          class="whitespace-nowrap shrink-0 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition shadow-sm shadow-indigo-500/20 flex items-center space-x-1.5 cursor-pointer"
         >
           <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
@@ -770,9 +790,7 @@ onUnmounted(() => {
         "
       >
         <div class="flex items-center justify-between">
-          <p class="text-[11px] font-bold uppercase tracking-wider text-rose-800">
-            Dibatalkan
-          </p>
+          <p class="text-[11px] font-bold uppercase tracking-wider text-rose-800">Dibatalkan</p>
           <span class="w-2 h-2 rounded-full bg-rose-500"></span>
         </div>
         <p class="text-2xl font-black text-rose-600 mt-1 font-mono">{{ stats.cancelled }}</p>
@@ -889,7 +907,9 @@ onUnmounted(() => {
       </div>
 
       <!-- Baris 2: Filter Batch Kompak, Filter Rentang Tanggal, & Indikator Hasil -->
-      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 pt-3 border-t border-slate-100">
+      <div
+        class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 pt-3 border-t border-slate-100"
+      >
         <div class="flex flex-wrap items-center gap-2.5">
           <!-- Compact Batch Selector Dropdown & Quick Actions -->
           <div class="flex items-center gap-1.5 shrink-0">
@@ -912,7 +932,12 @@ onUnmounted(() => {
                 title="Ubah nama batch terpilih"
               >
                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                  />
                 </svg>
               </button>
               <button
@@ -922,52 +947,33 @@ onUnmounted(() => {
                 title="Hapus batch ini beserta semua pesanannya"
               >
                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                  />
                 </svg>
               </button>
             </template>
           </div>
 
-          <!-- Date Range Picker (Dari - Sampai) -->
-          <div
-            class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus-within:bg-white focus-within:ring-2 focus-within:ring-slate-900 transition shrink-0"
-            title="Filter Rentang Tanggal Pembuatan / Pesanan"
-          >
-            <svg class="w-3.5 h-3.5 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-            <span class="text-[11px] text-slate-400 font-normal">Dari</span>
-            <input
-              v-model="startDate"
-              type="date"
-              class="bg-transparent text-xs font-bold text-slate-800 focus:outline-none cursor-pointer"
-              title="Tanggal Awal"
+          <!-- Single Date Range Picker Component -->
+          <div class="w-full sm:w-72 shrink-0">
+            <DateRangePicker
+              v-model:startDate="startDate"
+              v-model:endDate="endDate"
+              placeholder="Filter rentang tanggal..."
             />
-            <span class="text-[11px] text-slate-400 font-normal">&ndash; Sampai</span>
-            <input
-              v-model="endDate"
-              type="date"
-              class="bg-transparent text-xs font-bold text-slate-800 focus:outline-none cursor-pointer"
-              title="Tanggal Akhir"
-            />
-            <button
-              v-if="startDate || endDate"
-              type="button"
-              @click="startDate = ''; endDate = '';"
-              class="p-0.5 text-slate-400 hover:text-slate-700 rounded-full cursor-pointer ml-1"
-              title="Hapus filter rentang tanggal"
-            >
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
           </div>
         </div>
 
         <!-- Right Side: Counter & Reset Filter Button -->
         <div class="flex items-center gap-3 text-xs justify-between md:justify-end">
           <span class="text-slate-500">
-            Menampilkan <strong class="text-slate-900 font-mono">{{ filteredOrders.length }}</strong> dari <strong class="text-slate-900 font-mono">{{ stats.total }}</strong> pesanan
+            Menampilkan
+            <strong class="text-slate-900 font-mono">{{ filteredOrders.length }}</strong> dari
+            <strong class="text-slate-900 font-mono">{{ stats.total }}</strong> pesanan
           </span>
           <button
             v-if="isFilterActive"
@@ -987,20 +993,37 @@ onUnmounted(() => {
       class="bg-blue-50/70 border border-blue-200/80 rounded-2xl px-4 py-2.5 flex items-center justify-between text-xs text-blue-900"
     >
       <div class="flex items-center gap-2">
-        <svg class="w-4 h-4 text-blue-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        <svg
+          class="w-4 h-4 text-blue-600 shrink-0"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+          />
         </svg>
         <span>
           Filter Rentang Tanggal:
-          <strong class="font-mono">{{ startDate ? startDate.split('-').reverse().join('-') : 'Awal' }}</strong>
+          <strong class="font-mono">{{
+            startDate ? startDate.split('-').reverse().join('-') : 'Awal'
+          }}</strong>
           s/d
-          <strong class="font-mono">{{ endDate ? endDate.split('-').reverse().join('-') : 'Hari ini' }}</strong>
+          <strong class="font-mono">{{
+            endDate ? endDate.split('-').reverse().join('-') : 'Hari ini'
+          }}</strong>
           &mdash; Ditemukan <strong>{{ filteredOrders.length }}</strong> pesanan.
         </span>
       </div>
       <button
         type="button"
-        @click="startDate = ''; endDate = '';"
+        @click="
+          startDate = '';
+          endDate = '';
+        "
         class="text-blue-700 hover:text-blue-900 font-bold underline cursor-pointer text-xs"
       >
         Hapus Filter Tanggal
@@ -1071,7 +1094,7 @@ onUnmounted(() => {
 
           <!-- Setiap Pesanan Dibungkus dalam 1 Tbody -->
           <tbody
-            v-for="order in filteredOrders"
+            v-for="order in paginatedOrders"
             :key="order.resi"
             @click="openDetail(order)"
             class="border-b-2 border-slate-200/70 hover:bg-slate-50/70 transition-colors cursor-pointer group"
@@ -1321,6 +1344,13 @@ onUnmounted(() => {
           </tbody>
         </table>
       </div>
+
+      <!-- Pagination Footer -->
+      <Pagination
+        v-model:currentPage="currentPage"
+        v-model:pageSize="pageSize"
+        :totalItems="filteredOrders.length"
+      />
     </div>
 
     <!-- MODAL DETAIL LENGKAP PESANAN -->
@@ -1380,15 +1410,27 @@ onUnmounted(() => {
             v-if="selectedOrder.status === 'dibatalkan'"
             class="bg-rose-50 border-2 border-rose-300 rounded-2xl p-4 flex items-start space-x-3 text-rose-900 shadow-sm"
           >
-            <div class="w-8 h-8 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0 mt-0.5">
+            <div
+              class="w-8 h-8 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0 mt-0.5"
+            >
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                />
               </svg>
             </div>
             <div class="flex-1 text-xs">
-              <h4 class="font-extrabold text-sm text-rose-900">PERINGATAN: PESANAN INI TELAH DIBATALKAN</h4>
+              <h4 class="font-extrabold text-sm text-rose-900">
+                PERINGATAN: PESANAN INI TELAH DIBATALKAN
+              </h4>
               <p class="mt-0.5 text-rose-800 leading-relaxed">
-                Pesanan telah dibatalkan oleh pembeli atau sistem. Jika paket sudah terlanjur dikemas (packing), <strong>harap bongkar paket dan kembalikan produk ke rak stok</strong>. Sistem scanner otomatis menolak resi ini jika discan untuk pengiriman.
+                Pesanan telah dibatalkan oleh pembeli atau sistem. Jika paket sudah terlanjur
+                dikemas (packing),
+                <strong>harap bongkar paket dan kembalikan produk ke rak stok</strong>. Sistem
+                scanner otomatis menolak resi ini jika discan untuk pengiriman.
               </p>
             </div>
           </div>
@@ -1627,15 +1669,27 @@ onUnmounted(() => {
         </div>
 
         <!-- Modal Footer with Edit & Delete Actions -->
-        <div class="px-6 py-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between shrink-0">
+        <div
+          class="px-6 py-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between shrink-0"
+        >
           <button
             type="button"
             @click="openDeleteOrder(selectedOrder)"
             class="px-4 py-2 border border-rose-300 text-rose-700 hover:bg-rose-50 rounded-xl text-xs font-bold transition cursor-pointer flex items-center space-x-1.5"
             title="Hapus pesanan ini dari database"
           >
-            <svg class="w-4 h-4 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            <svg
+              class="w-4 h-4 text-rose-600"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+              />
             </svg>
             <span>Hapus Pesanan</span>
           </button>
@@ -1649,8 +1703,18 @@ onUnmounted(() => {
               class="px-4 py-2 border border-amber-300 text-amber-800 hover:bg-amber-50 rounded-xl text-xs font-bold transition cursor-pointer flex items-center space-x-1.5"
               title="Tandai pesanan ini sebagai Dibatalkan (Cancel)"
             >
-              <svg class="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+              <svg
+                class="w-4 h-4 text-amber-600"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"
+                />
               </svg>
               <span>Batalkan Pesanan</span>
             </button>
@@ -1665,7 +1729,12 @@ onUnmounted(() => {
               title="Pulihkan pesanan ini ke status aktif"
             >
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                />
               </svg>
               <span v-if="isRestoring">Memulihkan...</span>
               <span v-else>Pulihkan Pesanan</span>
@@ -1677,7 +1746,12 @@ onUnmounted(() => {
               class="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition cursor-pointer flex items-center space-x-1.5"
             >
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                />
               </svg>
               <span>Edit Data &amp; Barang</span>
             </button>
@@ -1700,18 +1774,29 @@ onUnmounted(() => {
       role="dialog"
       aria-modal="true"
     >
-      <div class="bg-white rounded-3xl shadow-2xl max-w-4xl w-full overflow-hidden border border-slate-200 max-h-[92vh] flex flex-col">
+      <div
+        class="bg-white rounded-3xl shadow-2xl max-w-4xl w-full overflow-hidden border border-slate-200 max-h-[92vh] flex flex-col"
+      >
         <!-- Edit Modal Header -->
         <div class="px-6 py-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
           <div class="flex items-center space-x-3">
-            <div class="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center font-bold text-sm">
+            <div
+              class="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center font-bold text-sm"
+            >
               <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                />
               </svg>
             </div>
             <div>
               <h3 class="text-base font-extrabold tracking-tight">Edit Pesanan &amp; Barang</h3>
-              <p class="text-xs text-slate-400 font-mono">Perbaiki kesalahan parsing atau data salah upload</p>
+              <p class="text-xs text-slate-400 font-mono">
+                Perbaiki kesalahan parsing atau data salah upload
+              </p>
             </div>
           </div>
           <button
@@ -1720,17 +1805,29 @@ onUnmounted(() => {
             class="text-slate-400 hover:text-white p-1 rounded-lg cursor-pointer"
           >
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M6 18L18 6M6 6l12 12"
+              />
             </svg>
           </button>
         </div>
 
         <!-- Edit Modal Form Body (Scrollable) -->
-        <form @submit.prevent="saveEditOrder" class="p-6 space-y-5 overflow-y-auto flex-1 text-xs text-slate-800">
+        <form
+          @submit.prevent="saveEditOrder"
+          class="p-6 space-y-5 overflow-y-auto flex-1 text-xs text-slate-800"
+        >
           <!-- Identitas Resi & Kurir -->
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-200/80">
+          <div
+            class="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-200/80"
+          >
             <div>
-              <label class="block font-bold uppercase tracking-wider text-slate-700 mb-1">No. Resi J&amp;T *</label>
+              <label class="block font-bold uppercase tracking-wider text-slate-700 mb-1"
+                >No. Resi J&amp;T *</label
+              >
               <input
                 v-model="editOrderForm.resi"
                 type="text"
@@ -1740,7 +1837,9 @@ onUnmounted(() => {
             </div>
 
             <div>
-              <label class="block font-bold uppercase tracking-wider text-slate-700 mb-1">Order ID TikTok (18 Digit) *</label>
+              <label class="block font-bold uppercase tracking-wider text-slate-700 mb-1"
+                >Order ID TikTok (18 Digit) *</label
+              >
               <input
                 v-model="editOrderForm.order_id"
                 type="text"
@@ -1750,7 +1849,9 @@ onUnmounted(() => {
             </div>
 
             <div>
-              <label class="block font-bold uppercase tracking-wider text-slate-700 mb-1">Kode Sortir J&amp;T</label>
+              <label class="block font-bold uppercase tracking-wider text-slate-700 mb-1"
+                >Kode Sortir J&amp;T</label
+              >
               <input
                 v-model="editOrderForm.sorting_code"
                 type="text"
@@ -1760,7 +1861,9 @@ onUnmounted(() => {
             </div>
 
             <div>
-              <label class="block font-bold uppercase tracking-wider text-slate-700 mb-1">Layanan Kurir</label>
+              <label class="block font-bold uppercase tracking-wider text-slate-700 mb-1"
+                >Layanan Kurir</label
+              >
               <input
                 v-model="editOrderForm.service"
                 type="text"
@@ -1770,7 +1873,9 @@ onUnmounted(() => {
             </div>
 
             <div>
-              <label class="block font-bold uppercase tracking-wider text-slate-700 mb-1">Berat Paket (kg)</label>
+              <label class="block font-bold uppercase tracking-wider text-slate-700 mb-1"
+                >Berat Paket (kg)</label
+              >
               <input
                 v-model.number="editOrderForm.weight_kg"
                 type="number"
@@ -1781,7 +1886,9 @@ onUnmounted(() => {
             </div>
 
             <div>
-              <label class="block font-bold uppercase tracking-wider text-slate-700 mb-1">Tanggal Pesanan / Label</label>
+              <label class="block font-bold uppercase tracking-wider text-slate-700 mb-1"
+                >Tanggal Pesanan / Label</label
+              >
               <input
                 v-model="editOrderForm.ship_date"
                 type="text"
@@ -1804,7 +1911,9 @@ onUnmounted(() => {
 
           <!-- Data Penerima & Alamat -->
           <div class="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 space-y-3">
-            <h4 class="font-bold uppercase tracking-wider text-slate-700">Data Penerima &amp; Alamat</h4>
+            <h4 class="font-bold uppercase tracking-wider text-slate-700">
+              Data Penerima &amp; Alamat
+            </h4>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label class="block font-medium text-slate-600 mb-1">Nama Penerima *</label>
@@ -1839,9 +1948,14 @@ onUnmounted(() => {
           <div class="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 space-y-3">
             <div class="flex items-center justify-between">
               <div>
-                <h4 class="font-bold uppercase tracking-wider text-slate-700">Rincian Barang yang Harus Dikemas</h4>
+                <h4 class="font-bold uppercase tracking-wider text-slate-700">
+                  Rincian Barang yang Harus Dikemas
+                </h4>
                 <p class="text-[11px] text-slate-400 mt-0.5">
-                  Total Qty: <strong class="text-slate-900 font-mono">{{ editOrderForm.items.reduce((s, it) => s + (it.qty || 0), 0) }} pcs</strong>
+                  Total Qty:
+                  <strong class="text-slate-900 font-mono"
+                    >{{ editOrderForm.items.reduce((s, it) => s + (it.qty || 0), 0) }} pcs</strong
+                  >
                 </p>
               </div>
               <button
@@ -1849,7 +1963,7 @@ onUnmounted(() => {
                 @click="addEditItem"
                 class="px-3 py-1.5 bg-white border border-slate-300 hover:border-slate-400 text-slate-800 rounded-xl font-bold text-xs flex items-center space-x-1 cursor-pointer transition shadow-sm"
               >
-                <span>+ Tambah Barang</span>
+                <span>Tambah Barang</span>
               </button>
             </div>
 
@@ -1865,7 +1979,11 @@ onUnmounted(() => {
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100">
-                  <tr v-for="(it, idx) in editOrderForm.items" :key="idx" class="hover:bg-slate-50/50">
+                  <tr
+                    v-for="(it, idx) in editOrderForm.items"
+                    :key="idx"
+                    class="hover:bg-slate-50/50"
+                  >
                     <td class="px-3 py-2">
                       <input
                         v-model="it.product_name"
@@ -1910,7 +2028,12 @@ onUnmounted(() => {
                         title="Hapus baris barang ini"
                       >
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2"
+                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                          />
                         </svg>
                       </button>
                     </td>
@@ -1952,7 +2075,7 @@ onUnmounted(() => {
             <button
               type="submit"
               :disabled="isSavingOrder"
-              class="px-6 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 disabled:opacity-50 transition cursor-pointer flex items-center space-x-1.5"
+              class="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-sm shadow-indigo-500/20 disabled:opacity-50 transition cursor-pointer flex items-center space-x-1.5"
             >
               <span v-if="isSavingOrder">Menyimpan Perubahan...</span>
               <span v-else>Simpan Perubahan Pesanan</span>
@@ -1969,11 +2092,18 @@ onUnmounted(() => {
       role="dialog"
       aria-modal="true"
     >
-      <div class="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden border border-rose-200 p-6 space-y-4">
+      <div
+        class="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden border border-rose-200 p-6 space-y-4"
+      >
         <div class="flex items-center space-x-3 text-rose-600">
           <div class="w-10 h-10 rounded-2xl bg-rose-50 flex items-center justify-center shrink-0">
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+              />
             </svg>
           </div>
           <div>
@@ -1982,9 +2112,13 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <div class="p-3.5 bg-rose-50/70 border border-rose-200 rounded-2xl text-xs text-rose-900 leading-relaxed">
+        <div
+          class="p-3.5 bg-rose-50/70 border border-rose-200 rounded-2xl text-xs text-rose-900 leading-relaxed"
+        >
           <p>
-            Pesanan atas nama <strong>{{ deletingOrder.recipient_name }}</strong> beserta seluruh <strong>{{ deletingOrder.items.length }} barang</strong> di dalamnya akan dihapus permanen dari sistem.
+            Pesanan atas nama <strong>{{ deletingOrder.recipient_name }}</strong> beserta seluruh
+            <strong>{{ deletingOrder.items.length }} barang</strong> di dalamnya akan dihapus
+            permanen dari sistem.
           </p>
         </div>
 
@@ -2016,11 +2150,18 @@ onUnmounted(() => {
       role="dialog"
       aria-modal="true"
     >
-      <div class="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden border border-amber-200 p-6 space-y-4">
+      <div
+        class="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden border border-amber-200 p-6 space-y-4"
+      >
         <div class="flex items-center space-x-3 text-amber-600">
           <div class="w-10 h-10 rounded-2xl bg-amber-50 flex items-center justify-center shrink-0">
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+              />
             </svg>
           </div>
           <div>
@@ -2029,13 +2170,17 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <div class="p-3.5 bg-amber-50/80 border border-amber-200 rounded-2xl text-xs text-amber-900 leading-relaxed space-y-1.5">
+        <div
+          class="p-3.5 bg-amber-50/80 border border-amber-200 rounded-2xl text-xs text-amber-900 leading-relaxed space-y-1.5"
+        >
           <p>
-            Pesanan atas nama <strong>{{ cancellingOrder.recipient_name }}</strong> akan ditandai dengan status <strong>DIBATALKAN</strong>.
+            Pesanan atas nama <strong>{{ cancellingOrder.recipient_name }}</strong> akan ditandai
+            dengan status <strong>DIBATALKAN</strong>.
           </p>
           <p class="text-[11px] text-amber-800">
-            &bull; Operator gudang tidak akan bisa men-scan resi ini untuk pengiriman.<br>
-            &bull; Jika paket sudah terlanjur dipacking, segera pisahkan dari tumpukan siap kirim dan kembalikan produk ke rak stok.
+            &bull; Operator gudang tidak akan bisa men-scan resi ini untuk pengiriman.<br />
+            &bull; Jika paket sudah terlanjur dipacking, segera pisahkan dari tumpukan siap kirim
+            dan kembalikan produk ke rak stok.
           </p>
         </div>
 
@@ -2067,7 +2212,9 @@ onUnmounted(() => {
       role="dialog"
       aria-modal="true"
     >
-      <div class="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-200 p-6 space-y-4">
+      <div
+        class="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-200 p-6 space-y-4"
+      >
         <div class="flex items-center justify-between border-b border-slate-100 pb-3">
           <h3 class="text-base font-bold text-slate-900">Ubah Nama Batch #{{ editingBatch.id }}</h3>
           <button
@@ -2076,13 +2223,20 @@ onUnmounted(() => {
             class="text-slate-400 hover:text-slate-600 p-1 rounded-lg cursor-pointer"
           >
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M6 18L18 6M6 6l12 12"
+              />
             </svg>
           </button>
         </div>
 
         <div>
-          <label class="block text-xs font-bold uppercase tracking-wider text-slate-700">Nama Batch Baru</label>
+          <label class="block text-xs font-bold uppercase tracking-wider text-slate-700"
+            >Nama Batch Baru</label
+          >
           <input
             v-model="editBatchName"
             type="text"
@@ -2121,11 +2275,18 @@ onUnmounted(() => {
       role="dialog"
       aria-modal="true"
     >
-      <div class="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden border border-rose-200 p-6 space-y-4">
+      <div
+        class="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden border border-rose-200 p-6 space-y-4"
+      >
         <div class="flex items-center space-x-3 text-rose-600">
           <div class="w-10 h-10 rounded-2xl bg-rose-50 flex items-center justify-center shrink-0">
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+              />
             </svg>
           </div>
           <div>
@@ -2134,10 +2295,13 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <div class="p-3.5 bg-rose-50/70 border border-rose-200 rounded-2xl text-xs text-rose-900 leading-relaxed">
+        <div
+          class="p-3.5 bg-rose-50/70 border border-rose-200 rounded-2xl text-xs text-rose-900 leading-relaxed"
+        >
           <p class="font-bold">Peringatan Penghapusan:</p>
           <p class="mt-1">
-            Seluruh pesanan beserta daftar barang di dalam batch ini akan <strong>dihapus permanen</strong> dari sistem.
+            Seluruh pesanan beserta daftar barang di dalam batch ini akan
+            <strong>dihapus permanen</strong> dari sistem.
           </p>
         </div>
 

@@ -19,6 +19,7 @@
     "db:migrate": "npm run db:migrate --workspace=server",
     "db:reset": "node scripts/reset-db.js",
     "seed:admin": "npm run seed:admin --workspace=server",
+    "seed:excel": "python scripts/seed_excel_inventory.py",
     "test": "vitest run",
     "lint": "eslint ."
   },

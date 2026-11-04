@@ -2,8 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { eq, desc, and, or, like, inArray, sql } from 'drizzle-orm';
 import { db } from '../db/client.js';
-import { batches, orders, order_items, scan_logs } from '../db/schema.js';
-import { parseJtPdf, type ParsedOrder } from '../parsers/jnt.js';
+import { batches, orders, order_items, scan_logs, products } from '../db/schema.js';
+import { parseJtPdf, type ParsedOrder, type ParsedItem } from '../parsers/jnt.js';
 import { config } from '../config.js';
 
 export interface DuplicateInfo {
@@ -13,7 +13,15 @@ export interface DuplicateInfo {
   created_at: string;
 }
 
-export interface EnrichedParsedOrder extends ParsedOrder {
+export interface EnrichedParsedItem extends ParsedItem {
+  is_recognized_sku?: boolean;
+  matched_product_id?: number | null;
+  matched_seller_sku?: string | null;
+  matched_product_name?: string | null;
+}
+
+export interface EnrichedParsedOrder extends Omit<ParsedOrder, 'items'> {
+  items: EnrichedParsedItem[];
   is_duplicate: boolean;
   duplicate_info?: DuplicateInfo | null;
 }
@@ -34,6 +42,15 @@ export interface CreateBatchInput {
   userId: number;
   forceConfirm?: boolean;
   skipDuplicates?: boolean;
+  editedOrders?: Array<{
+    resi: string;
+    items: Array<{
+      product_name: string;
+      sku: string;
+      seller_sku?: string | null;
+      qty: number;
+    }>;
+  }>;
 }
 
 export class BatchValidationError extends Error {
@@ -61,12 +78,38 @@ export async function enrichOrdersWithDuplicateCheck(
   let duplicateOrdersCount = 0;
   let newOrdersCount = 0;
 
+  // Ambil seluruh master produk untuk memeriksa keberadaan Seller SKU
+  const allMasterProducts = await db.select().from(products);
+
   for (const parsed of ordersList) {
+    // Enrich setiap item dengan status kecocokan Seller SKU
+    const enrichedItems: EnrichedParsedItem[] = parsed.items.map((it) => {
+      const rawSku = (it.seller_sku || it.sku || '').trim().toLowerCase();
+      const matched = allMasterProducts.find((p) => {
+        if (p.seller_sku.toLowerCase() === rawSku) return true;
+        if (p.sku_temp) {
+          const aliases = p.sku_temp.split(',').map((s) => s.trim().toLowerCase());
+          if (aliases.includes(rawSku)) return true;
+        }
+        return false;
+      });
+
+      return {
+        ...it,
+        seller_sku: matched?.seller_sku ?? (it.seller_sku || it.sku),
+        is_recognized_sku: !!matched,
+        matched_product_id: matched?.id ?? null,
+        matched_seller_sku: matched?.seller_sku ?? null,
+        matched_product_name: matched?.name ?? null,
+      };
+    });
+
     // 1. Cek duplikasi internal di dalam file PDF yang sama
     if (seenInPdf.has(parsed.resi)) {
       duplicateOrdersCount++;
       enriched.push({
         ...parsed,
+        items: enrichedItems,
         is_duplicate: true,
         duplicate_info: {
           batch_id: 0,
@@ -98,6 +141,7 @@ export async function enrichOrdersWithDuplicateCheck(
       duplicateOrdersCount++;
       enriched.push({
         ...parsed,
+        items: enrichedItems,
         is_duplicate: true,
         duplicate_info: {
           batch_id: existingOrder.batch_id,
@@ -110,6 +154,7 @@ export async function enrichOrdersWithDuplicateCheck(
       newOrdersCount++;
       enriched.push({
         ...parsed,
+        items: enrichedItems,
         is_duplicate: false,
         duplicate_info: null,
       });
@@ -195,6 +240,16 @@ export async function processAndSaveBatch(input: CreateBatchInput): Promise<{
     })
     .returning();
 
+  // Terapkan penyesuaian edit manual dari pratinjau jika disediakan
+  if (input.editedOrders && input.editedOrders.length > 0) {
+    const editMap = new Map(input.editedOrders.map((eo) => [eo.resi, eo.items]));
+    for (const parsed of enrichedOrders) {
+      if (editMap.has(parsed.resi)) {
+        parsed.items = editMap.get(parsed.resi)! as any;
+      }
+    }
+  }
+
   for (const parsed of enrichedOrders) {
     if (parsed.is_duplicate) {
       if (skipDuplicates) {
@@ -239,7 +294,7 @@ export async function processAndSaveBatch(input: CreateBatchInput): Promise<{
               order_id: existingOrder.id,
               product_name: item.product_name,
               sku: item.sku,
-              seller_sku: item.seller_sku,
+              seller_sku: item.seller_sku || item.sku,
               qty: item.qty,
             }))
           );
@@ -282,7 +337,7 @@ export async function processAndSaveBatch(input: CreateBatchInput): Promise<{
           order_id: newOrder.id,
           product_name: item.product_name,
           sku: item.sku,
-          seller_sku: item.seller_sku,
+          seller_sku: item.seller_sku || item.sku,
           qty: item.qty,
         }))
       );

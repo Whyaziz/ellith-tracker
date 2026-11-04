@@ -25,7 +25,7 @@ async function handleLogout() {
             </div>
             <div>
               <span class="text-lg font-black tracking-wider text-slate-900">ELLITH</span>
-              <span class="hidden sm:inline-block ml-2 text-[10px] bg-slate-900 text-white px-1.5 py-0.5 rounded font-black uppercase">
+              <span class="hidden sm:inline-block ml-2 text-[10px] bg-gradient-to-r from-indigo-600 to-indigo-700 text-white px-1.5 py-0.5 rounded font-bold uppercase shadow-xs">
                 OPS
               </span>
             </div>
@@ -35,7 +35,7 @@ async function handleLogout() {
             <RouterLink
               to="/orders"
               class="px-3.5 py-2 rounded-xl text-xs font-bold transition-colors"
-              :class="[$route.path === '/orders' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100']"
+              :class="[$route.path === '/orders' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100']"
             >
               Pesanan
             </RouterLink>
@@ -43,7 +43,7 @@ async function handleLogout() {
             <RouterLink
               to="/scan"
               class="px-3.5 py-2 rounded-xl text-xs font-bold transition-colors"
-              :class="[$route.path === '/scan' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100']"
+              :class="[$route.path === '/scan' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100']"
             >
               Scan
             </RouterLink>

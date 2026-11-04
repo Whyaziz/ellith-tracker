@@ -44,6 +44,9 @@ app.use(
 // Mount API router
 app.use('/api', apiRouter);
 
+// Serve static uploaded product images
+app.use('/uploads', express.static(config.paths.uploadsDir));
+
 // Serve static frontend assets if built and present in server/public
 if (fs.existsSync(config.paths.publicDir)) {
   app.use(express.static(config.paths.publicDir));

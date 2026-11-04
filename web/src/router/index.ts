@@ -12,17 +12,23 @@ const router = createRouter({
     },
     {
       path: '/',
-      redirect: '/orders',
+      redirect: '/dashboard',
     },
     {
-      path: '/upload',
-      name: 'upload',
-      component: () => import('../views/UploadView.vue'),
+      path: '/dashboard',
+      name: 'dashboard',
+      component: () => import('../views/DashboardView.vue'),
       meta: { requiresAuth: true },
     },
     {
       path: '/orders',
       name: 'orders',
+      component: () => import('../views/AllOrdersView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/printed-orders',
+      name: 'printed-orders',
       component: () => import('../views/OrdersView.vue'),
       meta: { requiresAuth: true },
     },
@@ -33,6 +39,24 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      path: '/products',
+      name: 'products',
+      component: () => import('../views/ProductsView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/stock',
+      name: 'stock',
+      component: () => import('../views/StockView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/upload',
+      name: 'upload',
+      component: () => import('../views/UploadView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/export',
       name: 'export',
       component: () => import('../views/ExportView.vue'),
@@ -40,7 +64,7 @@ const router = createRouter({
     },
     {
       path: '/:pathMatch(.*)*',
-      redirect: '/orders',
+      redirect: '/dashboard',
     },
   ],
 });
@@ -61,7 +85,7 @@ router.beforeEach(async (to, _from, next) => {
       query: { redirect: to.fullPath },
     });
   } else if (to.meta.requiresGuest && isAuth) {
-    next('/orders');
+    next('/dashboard');
   } else {
     next();
   }

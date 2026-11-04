@@ -54,7 +54,7 @@ async function handleSubmit() {
       <div class="mt-5">
         <div class="flex items-center justify-center space-x-2">
           <h1 class="text-3xl font-black tracking-widest text-slate-900 uppercase">ELLITH</h1>
-          <span class="text-[10px] font-black tracking-wider uppercase bg-slate-900 text-white px-2 py-0.5 rounded-md">OPS</span>
+          <span class="text-[10px] font-bold tracking-wider uppercase bg-gradient-to-r from-indigo-600 to-indigo-700 text-white px-2 py-0.5 rounded shadow-xs">OPS</span>
         </div>
         <p class="mt-1.5 text-xs text-slate-500 font-medium">
           Sistem Pelacakan Resi &amp; Gudang &bull; TikTok Shop (J&amp;T)
@@ -134,7 +134,7 @@ async function handleSubmit() {
             <button
               type="submit"
               :disabled="isSubmitting"
-              class="w-full flex justify-center items-center py-3 px-4 border border-transparent rounded-xl shadow-md shadow-slate-900/10 text-sm font-bold text-white bg-slate-900 hover:bg-slate-800 active:bg-black focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-900 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              class="w-full flex justify-center items-center py-3 px-4 border border-transparent rounded-xl shadow-sm shadow-indigo-500/25 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-600 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <svg v-if="isSubmitting" class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>

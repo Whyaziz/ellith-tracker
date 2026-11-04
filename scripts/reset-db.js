@@ -47,6 +47,13 @@ if (!fileDeleted && fs.existsSync(dbPath)) {
       'order_items',
       'orders',
       'batches',
+      'offline_order_items',
+      'offline_orders',
+      'stock_mutations',
+      'stock_batch_items',
+      'stock_batches',
+      'products',
+      'product_categories',
       'sessions',
       'users',
     ];

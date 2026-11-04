@@ -34,4 +34,5 @@ Thumbs.db
 *.sw?
 
 .gemini
+.agents
 docs/

@@ -88,6 +88,12 @@ batchRouter.post(
       const forceConfirm = req.body.confirmed === 'true' || req.body.confirmed === true;
       const skipDuplicates = req.body.skip_duplicates !== 'false' && req.body.skip_duplicates !== false;
 
+      const editedOrders = req.body.edited_orders
+        ? typeof req.body.edited_orders === 'string'
+          ? JSON.parse(req.body.edited_orders)
+          : req.body.edited_orders
+        : undefined;
+
       const result = await processAndSaveBatch({
         name: customName,
         sourceFilename: req.file.originalname,
@@ -95,6 +101,7 @@ batchRouter.post(
         userId,
         forceConfirm,
         skipDuplicates,
+        editedOrders,
       });
 
       res.json({
@@ -120,6 +127,53 @@ batchRouter.post(
     }
   }
 );
+
+// Simpan batch dari pratinjau yang sudah diunggah sebelumnya (beserta hasil edit manual Seller SKU)
+batchRouter.post('/save-preview', requireAuth, async (req, res, next) => {
+  try {
+    const userId = req.session.user!.id;
+    const { pdfPath, sourceFilename, name, confirmed, skip_duplicates, edited_orders } = req.body;
+
+    if (!pdfPath || !sourceFilename) {
+      res.status(400).json({ error: 'Data pratinjau PDF tidak lengkap' });
+      return;
+    }
+
+    const forceConfirm = confirmed === true || confirmed === 'true';
+    const skipDuplicates = skip_duplicates !== false && skip_duplicates !== 'false';
+
+    const result = await processAndSaveBatch({
+      name: typeof name === 'string' ? name.trim() : undefined,
+      sourceFilename,
+      pdfPath,
+      userId,
+      forceConfirm,
+      skipDuplicates,
+      editedOrders: edited_orders,
+    });
+
+    res.json({
+      message: result.message,
+      batch: result.batch,
+      stats: result.stats,
+      orders: result.parseResult.orders,
+      hasNeedsReview: result.parseResult.hasNeedsReview,
+      newOrdersCount: result.parseResult.newOrdersCount,
+      duplicateOrdersCount: result.parseResult.duplicateOrdersCount,
+    });
+  } catch (err) {
+    if (err instanceof BatchValidationError) {
+      res.status(422).json({
+        error: err.message,
+        requires_confirmation: true,
+        orders: err.parseResult.orders,
+        total: err.parseResult.totalOrders,
+      });
+      return;
+    }
+    next(err);
+  }
+});
 
 batchRouter.put('/:id', requireAuth, async (req, res, next) => {
   try {

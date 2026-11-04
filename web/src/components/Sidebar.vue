@@ -50,11 +50,11 @@ function closeMobile() {
         <div class="flex items-center space-x-1.5">
           <span class="text-base font-black tracking-wider text-slate-900">ELLITH</span>
           <span
-            class="text-[9px] font-black tracking-wider uppercase bg-slate-900 text-white px-1.5 py-0.5 rounded"
-            >OPS</span
+            class="text-[9px] font-black tracking-wider uppercase bg-indigo-600 text-white px-1.5 py-0.5 rounded shadow-xs"
+            >ERP</span
           >
         </div>
-        <div class="text-[10px] text-slate-500 font-medium">TikTok Shop &bull; J&amp;T Express</div>
+        <div class="text-[10px] text-slate-500 font-medium">Garment &bull; TikTok &bull; J&amp;T</div>
       </div>
     </div>
 
@@ -109,11 +109,11 @@ function closeMobile() {
               <div class="flex items-center space-x-1.5">
                 <span class="text-base font-black tracking-wider text-slate-900">ELLITH</span>
                 <span
-                  class="text-[9px] font-black tracking-wider uppercase bg-slate-900 text-white px-1.5 py-0.5 rounded"
-                  >OPS</span
+                  class="text-[9px] font-black tracking-wider uppercase bg-indigo-600 text-white px-1.5 py-0.5 rounded shadow-xs"
+                  >ERP</span
                 >
               </div>
-              <div class="text-[10px] text-slate-400 font-medium">TikTok Shop &bull; J&amp;T</div>
+              <div class="text-[10px] text-slate-400 font-medium">Garment &bull; TikTok Shop</div>
             </div>
           </div>
           <button
@@ -133,23 +133,38 @@ function closeMobile() {
           </button>
         </div>
 
-        <!-- Navigation Links (HANYA 2 MENU UTAMA) -->
+        <!-- Navigation Links (6 MENU UTAMA) -->
         <nav class="p-3 space-y-1.5 flex-1" aria-label="Navigasi Menu Mobile">
           <div class="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
             Navigasi Utama
           </div>
 
-          <!-- 1. Pesanan -->
+          <!-- 1. Dashboard -->
+          <RouterLink
+            to="/dashboard"
+            @click="closeMobile"
+            class="flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition cursor-pointer"
+            :class="[
+              route.path === '/dashboard' || route.path === '/'
+                ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/25'
+                : 'text-slate-600 hover:text-indigo-900 hover:bg-indigo-50/60',
+            ]"
+          >
+            <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+            </svg>
+            <span class="flex-1">Dashboard</span>
+          </RouterLink>
+
+          <!-- 2. Daftar Pesanan (Gabungan Online + Offline) -->
           <RouterLink
             to="/orders"
             @click="closeMobile"
-            class="flex items-center space-x-3 px-3.5 py-3 rounded-xl text-sm font-semibold transition cursor-pointer"
+            class="flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition cursor-pointer"
             :class="[
-              route.path.startsWith('/orders') ||
-              route.path === '/upload' ||
-              route.path === '/export'
-                ? 'bg-slate-900 text-white shadow-sm shadow-slate-900/10'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100',
+              route.path === '/orders'
+                ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/25'
+                : 'text-slate-600 hover:text-indigo-900 hover:bg-indigo-50/60',
             ]"
           >
             <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -163,15 +178,32 @@ function closeMobile() {
             <span class="flex-1">Daftar Pesanan</span>
           </RouterLink>
 
-          <!-- 2. Scan Barcode -->
+          <!-- 3. Resi Tercetak -->
+          <RouterLink
+            to="/printed-orders"
+            @click="closeMobile"
+            class="flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition cursor-pointer"
+            :class="[
+              route.path === '/printed-orders' || route.path === '/upload' || route.path === '/export'
+                ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/25'
+                : 'text-slate-600 hover:text-indigo-900 hover:bg-indigo-50/60',
+            ]"
+          >
+            <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <span class="flex-1">Resi Tercetak</span>
+          </RouterLink>
+
+          <!-- 4. Scan Barcode -->
           <RouterLink
             to="/scan"
             @click="closeMobile"
-            class="flex items-center space-x-3 px-3.5 py-3 rounded-xl text-sm font-semibold transition cursor-pointer"
+            class="flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition cursor-pointer"
             :class="[
               route.path === '/scan'
-                ? 'bg-slate-900 text-white shadow-sm shadow-slate-900/10'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100',
+                ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/25'
+                : 'text-slate-600 hover:text-indigo-900 hover:bg-indigo-50/60',
             ]"
           >
             <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -184,6 +216,40 @@ function closeMobile() {
             </svg>
             <span class="flex-1">Scan Barcode</span>
           </RouterLink>
+
+          <!-- 5. Master Data Produk -->
+          <RouterLink
+            to="/products"
+            @click="closeMobile"
+            class="flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition cursor-pointer"
+            :class="[
+              route.path === '/products'
+                ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/25'
+                : 'text-slate-600 hover:text-indigo-900 hover:bg-indigo-50/60',
+            ]"
+          >
+            <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+            </svg>
+            <span class="flex-1">Master Produk</span>
+          </RouterLink>
+
+          <!-- 6. Manajemen Stok -->
+          <RouterLink
+            to="/stock"
+            @click="closeMobile"
+            class="flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition cursor-pointer"
+            :class="[
+              route.path === '/stock'
+                ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/25'
+                : 'text-slate-600 hover:text-indigo-900 hover:bg-indigo-50/60',
+            ]"
+          >
+            <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+            </svg>
+            <span class="flex-1">Manajemen Stok</span>
+          </RouterLink>
         </nav>
       </div>
 
@@ -191,7 +257,7 @@ function closeMobile() {
       <div class="p-4 border-t border-slate-200/80 bg-slate-50 flex items-center justify-between">
         <div class="flex items-center space-x-2.5 min-w-0">
           <div
-            class="w-9 h-9 rounded-full bg-slate-900 text-white font-bold flex items-center justify-center text-xs shrink-0 uppercase shadow-sm"
+            class="w-9 h-9 rounded-full bg-gradient-to-tr from-indigo-700 to-indigo-500 text-white font-bold flex items-center justify-center text-xs shrink-0 uppercase shadow-xs"
           >
             {{ user?.username ? user.username.slice(0, 2) : 'EL' }}
           </div>
@@ -246,13 +312,13 @@ function closeMobile() {
                 ELLITH
               </span>
               <span
-                class="text-[9px] font-black tracking-widest uppercase bg-slate-900 text-white px-1.5 py-0.5 rounded"
+                class="text-[9px] font-black tracking-widest uppercase bg-indigo-600 text-white px-1.5 py-0.5 rounded shadow-xs"
               >
-                OPS
+                ERP
               </span>
             </div>
             <div class="text-[10px] text-slate-400 font-medium truncate mt-0.5">
-              TikTok &bull; J&amp;T
+              Garment &bull; TikTok &bull; J&amp;T
             </div>
           </div>
         </div>
@@ -282,7 +348,7 @@ function closeMobile() {
       >
         <div
           class="h-10 w-10 rounded-xl bg-white border border-slate-200 shadow-sm flex items-center justify-center p-1.5 overflow-hidden shrink-0"
-          title="ELLITH OPS"
+          title="ELLITH ERP"
         >
           <img src="/logo.jpg" alt="Logo ELLITH" class="h-full w-full object-contain" />
         </div>
@@ -305,27 +371,38 @@ function closeMobile() {
       </div>
 
       <!-- Main Navigation Menu (Expanded) -->
-      <div v-if="!isCollapsed" class="px-3 py-5 space-y-1.5 flex-1">
+      <div v-if="!isCollapsed" class="px-3 py-4 space-y-1.5 flex-1">
         <div class="px-3 pb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
           Menu Utama
         </div>
 
-        <!-- 1. Pesanan (Aktif untuk /orders, /upload, /export) -->
+        <!-- 1. Dashboard -->
+        <RouterLink
+          to="/dashboard"
+          class="flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 cursor-pointer group"
+          :class="[
+            route.path === '/dashboard' || route.path === '/'
+              ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/25'
+              : 'text-slate-600 hover:text-indigo-900 hover:bg-indigo-50/60',
+          ]"
+        >
+          <svg class="w-5 h-5 shrink-0 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+          </svg>
+          <span class="flex-1">Dashboard</span>
+        </RouterLink>
+
+        <!-- 2. Daftar Pesanan -->
         <RouterLink
           to="/orders"
           class="flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 cursor-pointer group"
           :class="[
-            route.path.startsWith('/orders') || route.path === '/upload' || route.path === '/export'
-              ? 'bg-slate-900 text-white shadow-sm shadow-slate-900/20'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80',
+            route.path === '/orders'
+              ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/25'
+              : 'text-slate-600 hover:text-indigo-900 hover:bg-indigo-50/60',
           ]"
         >
-          <svg
-            class="w-5 h-5 shrink-0 transition"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
+          <svg class="w-5 h-5 shrink-0 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
               stroke-linecap="round"
               stroke-linejoin="round"
@@ -336,22 +413,33 @@ function closeMobile() {
           <span class="flex-1">Daftar Pesanan</span>
         </RouterLink>
 
-        <!-- 2. Scan Barcode -->
+        <!-- 3. Resi Tercetak -->
+        <RouterLink
+          to="/printed-orders"
+          class="flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 cursor-pointer group"
+          :class="[
+            route.path === '/printed-orders' || route.path === '/upload' || route.path === '/export'
+              ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/25'
+              : 'text-slate-600 hover:text-indigo-900 hover:bg-indigo-50/60',
+          ]"
+        >
+          <svg class="w-5 h-5 shrink-0 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          <span class="flex-1">Resi Tercetak</span>
+        </RouterLink>
+
+        <!-- 4. Scan Barcode -->
         <RouterLink
           to="/scan"
           class="flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 cursor-pointer group"
           :class="[
             route.path === '/scan'
-              ? 'bg-slate-900 text-white shadow-sm shadow-slate-900/20'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80',
+              ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/25'
+              : 'text-slate-600 hover:text-indigo-900 hover:bg-indigo-50/60',
           ]"
         >
-          <svg
-            class="w-5 h-5 shrink-0 transition"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
+          <svg class="w-5 h-5 shrink-0 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
               stroke-linecap="round"
               stroke-linejoin="round"
@@ -364,25 +452,73 @@ function closeMobile() {
             class="text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider"
             :class="[
               route.path === '/scan'
-                ? 'bg-slate-800 text-emerald-400'
+                ? 'bg-indigo-700/80 text-emerald-300'
                 : 'bg-emerald-50 text-emerald-700 border border-emerald-200/50',
             ]"
           >
             USB
           </span>
         </RouterLink>
+
+        <!-- 5. Master Data Produk -->
+        <RouterLink
+          to="/products"
+          class="flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 cursor-pointer group"
+          :class="[
+            route.path === '/products'
+              ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/25'
+              : 'text-slate-600 hover:text-indigo-900 hover:bg-indigo-50/60',
+          ]"
+        >
+          <svg class="w-5 h-5 shrink-0 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+          </svg>
+          <span class="flex-1">Master Produk</span>
+        </RouterLink>
+
+        <!-- 6. Manajemen Stok -->
+        <RouterLink
+          to="/stock"
+          class="flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 cursor-pointer group"
+          :class="[
+            route.path === '/stock'
+              ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/25'
+              : 'text-slate-600 hover:text-indigo-900 hover:bg-indigo-50/60',
+          ]"
+        >
+          <svg class="w-5 h-5 shrink-0 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+          </svg>
+          <span class="flex-1">Manajemen Stok</span>
+        </RouterLink>
       </div>
 
       <!-- Main Navigation Menu (Collapsed - Icon Centered) -->
-      <div v-else class="px-2 py-5 space-y-2.5 flex-1 flex flex-col items-center">
-        <!-- 1. Pesanan Icon -->
+      <div v-else class="px-2 py-4 space-y-2 flex-1 flex flex-col items-center">
+        <!-- 1. Dashboard Icon -->
+        <RouterLink
+          to="/dashboard"
+          class="w-11 h-11 rounded-xl flex items-center justify-center transition-all duration-200 cursor-pointer relative group"
+          :class="[
+            route.path === '/dashboard' || route.path === '/'
+              ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/25'
+              : 'text-slate-600 hover:text-indigo-900 hover:bg-indigo-50/60',
+          ]"
+          title="Dashboard"
+        >
+          <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+          </svg>
+        </RouterLink>
+
+        <!-- 2. Pesanan Icon -->
         <RouterLink
           to="/orders"
-          class="w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-200 cursor-pointer relative group"
+          class="w-11 h-11 rounded-xl flex items-center justify-center transition-all duration-200 cursor-pointer relative group"
           :class="[
-            route.path.startsWith('/orders') || route.path === '/upload' || route.path === '/export'
-              ? 'bg-slate-900 text-white shadow-sm shadow-slate-900/20'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100',
+            route.path === '/orders'
+              ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/25'
+              : 'text-slate-600 hover:text-indigo-900 hover:bg-indigo-50/60',
           ]"
           title="Daftar Pesanan"
         >
@@ -396,14 +532,30 @@ function closeMobile() {
           </svg>
         </RouterLink>
 
-        <!-- 2. Scan Barcode Icon -->
+        <!-- 3. Resi Tercetak Icon -->
+        <RouterLink
+          to="/printed-orders"
+          class="w-11 h-11 rounded-xl flex items-center justify-center transition-all duration-200 cursor-pointer relative group"
+          :class="[
+            route.path === '/printed-orders' || route.path === '/upload' || route.path === '/export'
+              ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/25'
+              : 'text-slate-600 hover:text-indigo-900 hover:bg-indigo-50/60',
+          ]"
+          title="Resi Tercetak"
+        >
+          <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+        </RouterLink>
+
+        <!-- 4. Scan Barcode Icon -->
         <RouterLink
           to="/scan"
-          class="w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-200 cursor-pointer relative group"
+          class="w-11 h-11 rounded-xl flex items-center justify-center transition-all duration-200 cursor-pointer relative group"
           :class="[
             route.path === '/scan'
-              ? 'bg-slate-900 text-white shadow-sm shadow-slate-900/20'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100',
+              ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/25'
+              : 'text-slate-600 hover:text-indigo-900 hover:bg-indigo-50/60',
           ]"
           title="Scan Barcode USB"
         >
@@ -415,14 +567,46 @@ function closeMobile() {
               d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"
             />
           </svg>
-          <span class="absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-emerald-500"></span>
+          <span class="absolute top-2 right-2 w-2 h-2 rounded-full bg-emerald-500"></span>
+        </RouterLink>
+
+        <!-- 5. Master Produk Icon -->
+        <RouterLink
+          to="/products"
+          class="w-11 h-11 rounded-xl flex items-center justify-center transition-all duration-200 cursor-pointer relative group"
+          :class="[
+            route.path === '/products'
+              ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/25'
+              : 'text-slate-600 hover:text-indigo-900 hover:bg-indigo-50/60',
+          ]"
+          title="Master Produk"
+        >
+          <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+          </svg>
+        </RouterLink>
+
+        <!-- 6. Stok Icon -->
+        <RouterLink
+          to="/stock"
+          class="w-11 h-11 rounded-xl flex items-center justify-center transition-all duration-200 cursor-pointer relative group"
+          :class="[
+            route.path === '/stock'
+              ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/25'
+              : 'text-slate-600 hover:text-indigo-900 hover:bg-indigo-50/60',
+          ]"
+          title="Manajemen Stok"
+        >
+          <svg class="w-5 h-5 shrink-0 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+          </svg>
         </RouterLink>
       </div>
 
       <!-- System Status (Expanded vs Collapsed) -->
       <div
         v-if="!isCollapsed"
-        class="p-3.5 mx-3 mb-4 rounded-xl bg-slate-50 border border-slate-200/70 text-[11px] text-slate-500"
+        class="p-3 mx-3 mb-3 rounded-xl bg-slate-50 border border-slate-200/70 text-[11px] text-slate-500"
       >
         <div class="flex items-center space-x-2 font-bold text-slate-700">
           <span class="relative flex h-2 w-2">
@@ -431,13 +615,13 @@ function closeMobile() {
             ></span>
             <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
           </span>
-          <span>Sistem Aktif</span>
+          <span>ERP Aktif &amp; Terhubung</span>
         </div>
       </div>
       <div
         v-else
-        class="mb-4 flex items-center justify-center"
-        title="Sistem Aktif &amp; Terhubung"
+        class="mb-3 flex items-center justify-center"
+        title="ERP Aktif &amp; Terhubung"
       >
         <span class="relative flex h-2.5 w-2.5">
           <span
@@ -453,7 +637,7 @@ function closeMobile() {
       <div class="flex items-center justify-between">
         <div class="flex items-center space-x-3 min-w-0">
           <div
-            class="w-9 h-9 rounded-full bg-slate-900 text-white font-bold flex items-center justify-center text-xs shrink-0 uppercase shadow-sm"
+            class="w-9 h-9 rounded-full bg-gradient-to-tr from-indigo-700 to-indigo-500 text-white font-bold flex items-center justify-center text-xs shrink-0 uppercase shadow-xs"
           >
             {{ user?.username ? user.username.slice(0, 2) : 'EL' }}
           </div>
@@ -492,7 +676,7 @@ function closeMobile() {
       class="p-3 border-t border-slate-200/80 bg-slate-50/60 flex flex-col items-center gap-2.5"
     >
       <div
-        class="w-9 h-9 rounded-full bg-slate-900 text-white font-bold flex items-center justify-center text-xs shrink-0 uppercase shadow-sm"
+        class="w-9 h-9 rounded-full bg-gradient-to-tr from-indigo-700 to-indigo-500 text-white font-bold flex items-center justify-center text-xs shrink-0 uppercase shadow-sm"
         :title="`${user?.username ?? 'Admin'} (${user?.role === 'admin' ? 'Administrator' : 'Operator'})`"
       >
         {{ user?.username ? user.username.slice(0, 2) : 'EL' }}
