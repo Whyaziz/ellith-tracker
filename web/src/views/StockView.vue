@@ -75,6 +75,56 @@ const mutationForm = ref<{
 const isSavingMutation = ref(false);
 const mutationError = ref('');
 
+// Modal: Ubah Stok Fisik Langsung (Direct Stock Adjustment)
+const showAdjustModal = ref(false);
+const adjustingItem = ref<StockItem | null>(null);
+const adjustTargetStock = ref<number>(0);
+const adjustNotes = ref<string>('');
+const isSavingAdjust = ref(false);
+const adjustError = ref('');
+
+const adjustDiff = computed(() => {
+  if (!adjustingItem.value) return 0;
+  return (adjustTargetStock.value || 0) - adjustingItem.value.current_stock;
+});
+
+function openAdjustStock(item: StockItem) {
+  adjustingItem.value = item;
+  adjustTargetStock.value = item.current_stock;
+  adjustNotes.value = '';
+  adjustError.value = '';
+  showAdjustModal.value = true;
+}
+
+async function submitDirectAdjustment() {
+  if (!adjustingItem.value) return;
+  if (adjustTargetStock.value < 0) {
+    adjustError.value = 'Jumlah stok tidak boleh bernilai negatif.';
+    return;
+  }
+
+  isSavingAdjust.value = true;
+  adjustError.value = '';
+
+  try {
+    await api.post('/api/stock/adjust', {
+      seller_sku: adjustingItem.value.seller_sku,
+      target_stock: Number(adjustTargetStock.value),
+      notes: adjustNotes.value.trim() || undefined,
+    });
+    showAdjustModal.value = false;
+    await Promise.all([fetchStock(), fetchBatches(), fetchMutations()]);
+  } catch (err: unknown) {
+    if (err instanceof ApiError) {
+      adjustError.value = err.message;
+    } else {
+      adjustError.value = 'Gagal menyesuaikan stok produk';
+    }
+  } finally {
+    isSavingAdjust.value = false;
+  }
+}
+
 async function fetchStock() {
   isLoading.value = true;
   try {
@@ -130,6 +180,52 @@ const filteredStock = computed(() => {
     );
   });
 });
+
+// Grouped Stock per Kategori (Accordion)
+interface GroupedStock {
+  category_name: string;
+  items: StockItem[];
+  totalQty: number;
+}
+
+const groupedStock = computed<GroupedStock[]>(() => {
+  const map: Record<string, GroupedStock> = {};
+
+  for (const item of filteredStock.value) {
+    const cat = item.category_name || 'Tanpa Kategori';
+    if (!map[cat]) {
+      map[cat] = { category_name: cat, items: [], totalQty: 0 };
+    }
+    map[cat].items.push(item);
+    map[cat].totalQty += item.current_stock;
+  }
+
+  return Object.values(map).sort((a, b) => a.category_name.localeCompare(b.category_name));
+});
+
+// Expand / Collapse State per Kategori Stok
+const collapsedStockCategories = ref<Record<string, boolean>>({});
+
+function isStockCategoryExpanded(catName: string): boolean {
+  if (searchQuery.value.trim() || selectedStatus.value !== 'all') return true;
+  return !collapsedStockCategories.value[catName];
+}
+
+function toggleStockCategory(catName: string) {
+  collapsedStockCategories.value[catName] = !collapsedStockCategories.value[catName];
+}
+
+function expandAllStockCategories() {
+  collapsedStockCategories.value = {};
+}
+
+function collapseAllStockCategories() {
+  const map: Record<string, boolean> = {};
+  for (const g of groupedStock.value) {
+    map[g.category_name] = true;
+  }
+  collapsedStockCategories.value = map;
+}
 
 // Pagination State (Tab 1: Stock Overview)
 const currentPage = ref(1);
@@ -524,188 +620,250 @@ onMounted(() => {
         </div>
       </div>
 
-      <!-- Real-Time Stock Table -->
-      <div class="bg-white border border-slate-200/80 rounded-3xl shadow-sm overflow-hidden">
-        <div v-if="isLoading" class="p-8 text-center text-xs text-slate-400">
-          Memuat data stok real-time...
+      <!-- Kontrol Buka / Tutup Semua Kategori -->
+      <div v-if="filteredStock.length > 0" class="flex flex-wrap items-center justify-between text-xs px-1 text-slate-500 gap-2">
+        <div>
+          Menampilkan <strong>{{ filteredStock.length }}</strong> SKU dalam <strong>{{ groupedStock.length }}</strong> kategori
         </div>
+        <div class="flex items-center space-x-2">
+          <button
+            type="button"
+            @click="expandAllStockCategories"
+            class="text-indigo-600 hover:text-indigo-800 font-bold hover:underline cursor-pointer"
+          >
+            Buka Semua
+          </button>
+          <span>&bull;</span>
+          <button
+            type="button"
+            @click="collapseAllStockCategories"
+            class="text-slate-600 hover:text-slate-800 font-bold hover:underline cursor-pointer"
+          >
+            Tutup Semua
+          </button>
+        </div>
+      </div>
 
+      <!-- Real-Time Stock Accordion per Kategori -->
+      <div v-if="isLoading" class="bg-white border border-slate-200/80 rounded-3xl p-8 text-center text-xs text-slate-400">
+        Memuat data stok real-time...
+      </div>
+
+      <div
+        v-else-if="filteredStock.length === 0"
+        class="bg-white border border-slate-200/80 rounded-3xl p-10 text-center text-xs text-slate-500 font-medium"
+      >
+        Tidak ada data stok yang sesuai dengan filter.
+      </div>
+
+      <div v-else class="space-y-4">
         <div
-          v-else-if="filteredStock.length === 0"
-          class="p-10 text-center text-xs text-slate-500 font-medium"
+          v-for="group in groupedStock"
+          :key="group.category_name"
+          class="bg-white border border-slate-200/80 rounded-3xl shadow-xs overflow-hidden transition-all duration-200"
         >
-          Tidak ada data stok yang sesuai dengan filter.
-        </div>
+          <!-- Accordion Header -->
+          <button
+            type="button"
+            @click="toggleStockCategory(group.category_name)"
+            class="w-full px-5 py-4 flex items-center justify-between bg-slate-50/80 hover:bg-slate-100/80 border-b border-slate-100 transition cursor-pointer text-left select-none"
+          >
+            <div class="flex items-center space-x-3">
+              <span class="w-8 h-8 rounded-xl bg-indigo-50 border border-indigo-200/60 text-indigo-700 flex items-center justify-center font-bold text-xs shrink-0">
+                📦
+              </span>
+              <div>
+                <h4 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+                  {{ group.category_name }}
+                  <span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-indigo-100/70 text-indigo-800 border border-indigo-200">
+                    {{ group.items.length }} SKU
+                  </span>
+                  <span class="px-2 py-0.5 rounded-full text-[11px] font-mono font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                    Total Stok: {{ group.totalQty.toLocaleString('id-ID') }} pcs
+                  </span>
+                </h4>
+              </div>
+            </div>
 
-        <div v-else class="overflow-x-auto">
-          <table class="min-w-full divide-y divide-slate-100 text-left text-xs">
-            <thead class="bg-slate-50 text-slate-700 font-bold uppercase tracking-wider">
-              <tr>
-                <th class="px-4 py-3">Produk &amp; Seller SKU</th>
-                <th class="px-4 py-3">Kategori</th>
-                <th class="px-3 py-3 text-center">Stok Masuk</th>
-                <th class="px-3 py-3 text-center" title="Pesanan belum dikemas">Belum Dikemas</th>
-                <th class="px-3 py-3 text-center" title="Pesanan siap kirim">Siap Kirim</th>
-                <th class="px-3 py-3 text-center" title="Pesanan selesai terkirim">
-                  Selesai Kirim
-                </th>
-                <th class="px-3 py-3 text-center" title="Mutasi barang rusak/hilang">Mutasi</th>
-                <th class="px-4 py-3 text-center">Sisa Tersedia</th>
-                <th class="px-4 py-3 text-center">Kesehatan Stok</th>
-                <th class="px-4 py-3 text-right">Aksi Cepat</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-100 bg-white">
-              <tr v-for="it in paginatedStock" :key="it.id" class="hover:bg-slate-50/70 transition">
-                <!-- Produk -->
-                <td class="px-4 py-3 align-middle">
-                  <div class="flex items-center space-x-3">
-                    <div
-                      class="w-10 h-10 rounded-xl bg-slate-100 border border-slate-200 overflow-hidden shrink-0 flex items-center justify-center"
-                    >
-                      <img
-                        v-if="it.image_url"
-                        :src="it.image_url"
-                        alt="Foto"
-                        class="w-full h-full object-cover"
-                      />
-                      <svg
-                        v-else
-                        class="w-5 h-5 text-slate-400"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
+            <div class="flex items-center space-x-2">
+              <span class="text-xs text-slate-400 font-medium hidden sm:inline">
+                {{ isStockCategoryExpanded(group.category_name) ? 'Sembunyikan' : 'Tampilkan' }}
+              </span>
+              <svg
+                class="w-5 h-5 text-slate-400 transform transition-transform duration-200"
+                :class="isStockCategoryExpanded(group.category_name) ? 'rotate-180' : ''"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
+          </button>
+
+          <!-- Accordion Body (Tabel SKU dalam Kategori) -->
+          <div v-show="isStockCategoryExpanded(group.category_name)" class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-slate-100 text-left text-xs">
+              <thead class="bg-slate-50/40 text-slate-600 font-bold uppercase tracking-wider text-[11px]">
+                <tr>
+                  <th class="px-4 py-2.5">Produk &amp; Seller SKU</th>
+                  <th class="px-3 py-2.5 text-center">Stok Masuk</th>
+                  <th class="px-3 py-2.5 text-center" title="Pesanan belum dikemas">Belum Dikemas</th>
+                  <th class="px-3 py-2.5 text-center" title="Pesanan siap kirim">Siap Kirim</th>
+                  <th class="px-3 py-2.5 text-center" title="Pesanan selesai terkirim">Selesai Kirim</th>
+                  <th class="px-3 py-2.5 text-center" title="Mutasi barang rusak/hilang">Mutasi</th>
+                  <th class="px-4 py-2.5 text-center">Sisa Tersedia</th>
+                  <th class="px-4 py-2.5 text-center">Kesehatan Stok</th>
+                  <th class="px-4 py-2.5 text-right">Aksi Cepat</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100 bg-white">
+                <tr v-for="it in group.items" :key="it.id" class="hover:bg-slate-50/70 transition">
+                  <!-- Produk -->
+                  <td class="px-4 py-3 align-middle">
+                    <div class="flex items-center space-x-3">
+                      <div
+                        class="w-10 h-10 rounded-xl bg-slate-100 border border-slate-200 overflow-hidden shrink-0 flex items-center justify-center"
                       >
-                        <path
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
-                          stroke-width="2"
-                          d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                        <img
+                          v-if="it.image_url"
+                          :src="it.image_url"
+                          alt="Foto"
+                          class="w-full h-full object-cover"
                         />
-                      </svg>
+                        <svg
+                          v-else
+                          class="w-5 h-5 text-slate-400"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2"
+                            d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                          />
+                        </svg>
+                      </div>
+                      <div>
+                        <div class="font-mono font-bold text-slate-900 text-xs">
+                          {{ it.seller_sku }}
+                        </div>
+                        <div class="font-medium text-slate-700 line-clamp-1 text-[11px]">
+                          {{ it.name }}
+                        </div>
+                        <div v-if="it.sku_temp" class="text-[10px] text-slate-400 font-mono">
+                          Alias: {{ it.sku_temp }}
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <div class="font-mono font-bold text-slate-900 text-xs">
-                        {{ it.seller_sku }}
-                      </div>
-                      <div class="font-medium text-slate-700 line-clamp-1 text-[11px]">
-                        {{ it.name }}
-                      </div>
-                      <div v-if="it.sku_temp" class="text-[10px] text-slate-400 font-mono">
-                        Alias: {{ it.sku_temp }}
-                      </div>
+                  </td>
+
+                  <!-- Stok Masuk -->
+                  <td class="px-3 py-3 align-middle text-center font-mono font-bold text-slate-800">
+                    +{{ it.total_in.toLocaleString('id-ID') }}
+                  </td>
+
+                  <!-- Belum Dikemas -->
+                  <td
+                    class="px-3 py-3 align-middle text-center font-mono text-amber-700 font-bold bg-amber-50/40"
+                  >
+                    {{ it.unpacked > 0 ? `-${it.unpacked}` : '-' }}
+                  </td>
+
+                  <!-- Siap Kirim -->
+                  <td
+                    class="px-3 py-3 align-middle text-center font-mono text-blue-700 font-bold bg-blue-50/40"
+                  >
+                    {{ it.packed > 0 ? `-${it.packed}` : '-' }}
+                  </td>
+
+                  <!-- Selesai Kirim -->
+                  <td class="px-3 py-3 align-middle text-center font-mono text-slate-600">
+                    {{ it.shipped > 0 ? `-${it.shipped}` : '-' }}
+                  </td>
+
+                  <!-- Mutasi -->
+                  <td class="px-3 py-3 align-middle text-center font-mono text-rose-600 font-bold">
+                    {{ it.total_mutations > 0 ? `-${it.total_mutations}` : '-' }}
+                  </td>
+
+                  <!-- Sisa Tersedia -->
+                  <td class="px-4 py-3 align-middle text-center whitespace-nowrap">
+                    <div
+                      class="font-mono font-black text-sm px-2.5 py-1 rounded-xl inline-block"
+                      :class="[
+                        it.current_stock <= 0
+                          ? 'bg-rose-100 text-rose-900 border border-rose-300'
+                          : it.current_stock < it.min_stock
+                            ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                            : 'bg-emerald-50 text-emerald-900 border border-emerald-200',
+                      ]"
+                    >
+                      {{ it.current_stock.toLocaleString('id-ID') }} pcs
                     </div>
-                  </div>
-                </td>
+                  </td>
 
-                <!-- Kategori -->
-                <td class="px-4 py-3 align-middle whitespace-nowrap">
-                  <span
-                    class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-800"
-                  >
-                    {{ it.category_name || '-' }}
-                  </span>
-                </td>
+                  <!-- Kesehatan Stok -->
+                  <td class="px-4 py-3 align-middle text-center whitespace-nowrap">
+                    <span
+                      v-if="it.stock_status === 'habis'"
+                      class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-300 inline-flex items-center space-x-1"
+                    >
+                      <span class="w-1.5 h-1.5 rounded-full bg-rose-600"></span>
+                      <span>Stok Habis</span>
+                    </span>
+                    <span
+                      v-else-if="it.stock_status === 'menipis'"
+                      class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300 inline-flex items-center space-x-1"
+                    >
+                      <span class="w-1.5 h-1.5 rounded-full bg-amber-600"></span>
+                      <span>Menipis (&lt; {{ it.min_stock }})</span>
+                    </span>
+                    <span
+                      v-else-if="it.stock_status === 'berlebih'"
+                      class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-300 inline-flex items-center space-x-1"
+                    >
+                      <span class="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
+                      <span>Overstock (&gt; {{ it.max_stock }})</span>
+                    </span>
+                    <span
+                      v-else
+                      class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 inline-flex items-center space-x-1"
+                    >
+                      <span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                      <span>Aman / Normal</span>
+                    </span>
+                  </td>
 
-                <!-- Stok Masuk -->
-                <td class="px-3 py-3 align-middle text-center font-mono font-bold text-slate-800">
-                  {{ it.total_in }}
-                </td>
-
-                <!-- Belum Dikemas -->
-                <td
-                  class="px-3 py-3 align-middle text-center font-mono text-amber-700 font-bold bg-amber-50/40"
-                >
-                  {{ it.unpacked }}
-                </td>
-
-                <!-- Siap Kirim -->
-                <td
-                  class="px-3 py-3 align-middle text-center font-mono text-blue-700 font-bold bg-blue-50/40"
-                >
-                  {{ it.packed }}
-                </td>
-
-                <!-- Selesai Kirim -->
-                <td class="px-3 py-3 align-middle text-center font-mono text-slate-600">
-                  {{ it.shipped }}
-                </td>
-
-                <!-- Mutasi -->
-                <td class="px-3 py-3 align-middle text-center font-mono text-rose-600 font-bold">
-                  {{ it.total_mutations > 0 ? `-${it.total_mutations}` : '0' }}
-                </td>
-
-                <!-- Sisa Tersedia (Physical / Available) -->
-                <td class="px-4 py-3 align-middle text-center whitespace-nowrap">
-                  <div
-                    class="font-mono font-black text-sm px-2.5 py-1 rounded-xl inline-block"
-                    :class="[
-                      it.current_stock <= 0
-                        ? 'bg-rose-100 text-rose-900 border border-rose-300'
-                        : it.current_stock < it.min_stock
-                          ? 'bg-amber-100 text-amber-900 border border-amber-300'
-                          : 'bg-emerald-50 text-emerald-900 border border-emerald-200',
-                    ]"
-                  >
-                    {{ it.current_stock }} pcs
-                  </div>
-                </td>
-
-                <!-- Kesehatan Stok -->
-                <td class="px-4 py-3 align-middle text-center whitespace-nowrap">
-                  <span
-                    v-if="it.stock_status === 'habis'"
-                    class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-300 flex items-center justify-center space-x-1"
-                  >
-                    <span class="w-1.5 h-1.5 rounded-full bg-rose-600"></span>
-                    <span>Stok Habis</span>
-                  </span>
-                  <span
-                    v-else-if="it.stock_status === 'menipis'"
-                    class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300 flex items-center justify-center space-x-1"
-                  >
-                    <span class="w-1.5 h-1.5 rounded-full bg-amber-600"></span>
-                    <span>Menipis (&lt; {{ it.min_stock }})</span>
-                  </span>
-                  <span
-                    v-else-if="it.stock_status === 'berlebih'"
-                    class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-300 flex items-center justify-center space-x-1"
-                  >
-                    <span class="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
-                    <span>Overstock (&gt; {{ it.max_stock }})</span>
-                  </span>
-                  <span
-                    v-else
-                    class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 flex items-center justify-center space-x-1"
-                  >
-                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
-                    <span>Aman / Normal</span>
-                  </span>
-                </td>
-
-                <!-- Aksi Cepat -->
-                <td class="px-4 py-3 align-middle text-right whitespace-nowrap">
-                  <button
-                    type="button"
-                    @click="openAddMutation(it.seller_sku)"
-                    class="text-[11px] font-bold text-rose-600 hover:text-rose-800 hover:underline cursor-pointer"
-                    title="Catat mutasi pengurangan untuk item ini"
-                  >
-                    Mutasi
-                  </button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+                  <!-- Aksi Cepat: Edit Stok & Mutasi -->
+                  <td class="px-4 py-3 align-middle text-right whitespace-nowrap">
+                    <div class="flex items-center justify-end space-x-2">
+                      <button
+                        type="button"
+                        @click="openAdjustStock(it)"
+                        class="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 hover:underline cursor-pointer"
+                        title="Ubah jumlah stok fisik secara langsung"
+                      >
+                        Edit Stok
+                      </button>
+                      <span class="text-slate-200">|</span>
+                      <button
+                        type="button"
+                        @click="openAddMutation(it.seller_sku)"
+                        class="text-[11px] font-bold text-rose-600 hover:text-rose-800 hover:underline cursor-pointer"
+                        title="Catat mutasi pengurangan untuk item ini"
+                      >
+                        Mutasi
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
-
-        <!-- Pagination Footer -->
-        <Pagination
-          v-model:currentPage="currentPage"
-          v-model:pageSize="pageSize"
-          :totalItems="filteredStock.length"
-        />
       </div>
     </div>
 
@@ -1049,10 +1207,10 @@ onMounted(() => {
             />
           </div>
 
-          <!-- Alasan / Catatan -->
+          <!-- Alasan / Catatan (Opsional) -->
           <div>
             <label class="block text-xs font-bold uppercase tracking-wider text-slate-700">
-              Alasan / Keterangan Mutasi
+              Alasan / Keterangan Mutasi (Opsional)
             </label>
             <textarea
               v-model="mutationForm.notes"
@@ -1077,6 +1235,147 @@ onMounted(() => {
             >
               <span v-if="isSavingMutation">Mencatat...</span>
               <span v-else>Kurangi Stok</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- MODAL: UBAH JUMLAH STOK FISIK LANGSUNG -->
+    <div
+      v-if="showAdjustModal && adjustingItem"
+      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div
+        class="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden border border-indigo-200 p-6 space-y-4"
+      >
+        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div class="flex items-center space-x-2">
+            <span
+              class="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-xs font-bold"
+            >
+              ✎
+            </span>
+            <h3 class="text-base font-bold text-slate-900">Ubah Jumlah Stok Fisik</h3>
+          </div>
+          <button
+            type="button"
+            @click="showAdjustModal = false"
+            class="text-slate-400 hover:text-slate-600 p-1 rounded-lg cursor-pointer"
+          >
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+          </button>
+        </div>
+
+        <div
+          v-if="adjustError"
+          class="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 font-semibold"
+        >
+          {{ adjustError }}
+        </div>
+
+        <!-- Info Produk -->
+        <div class="p-3.5 bg-slate-50 border border-slate-200/80 rounded-2xl text-xs space-y-1.5">
+          <div class="flex items-center justify-between">
+            <span class="text-slate-500 font-medium">Seller SKU:</span>
+            <span class="font-mono font-bold text-slate-900">{{ adjustingItem.seller_sku }}</span>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-slate-500 font-medium">Nama Produk:</span>
+            <span class="font-bold text-slate-800 truncate max-w-[220px]" :title="adjustingItem.name">
+              {{ adjustingItem.name }}
+            </span>
+          </div>
+          <div class="flex items-center justify-between pt-1.5 border-t border-slate-200/60">
+            <span class="text-slate-500 font-medium">Stok Fisik Saat Ini:</span>
+            <span class="font-mono font-black text-slate-900">{{ adjustingItem.current_stock.toLocaleString('id-ID') }} pcs</span>
+          </div>
+        </div>
+
+        <form @submit.prevent="submitDirectAdjustment" class="space-y-4">
+          <!-- Input Stok Baru -->
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
+              Jumlah Stok Baru (Pcs) <span class="text-indigo-600">*</span>
+            </label>
+            <input
+              v-model.number="adjustTargetStock"
+              type="number"
+              min="0"
+              required
+              class="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-black font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-600"
+              placeholder="Ketik total stok fisik riil..."
+            />
+          </div>
+
+          <!-- Indikator Selisih Otomatis -->
+          <div
+            class="p-3 rounded-2xl text-xs border"
+            :class="[
+              adjustDiff > 0
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                : adjustDiff < 0
+                  ? 'bg-rose-50 border-rose-200 text-rose-800'
+                  : 'bg-slate-50 border-slate-200 text-slate-600'
+            ]"
+          >
+            <div class="font-bold flex items-center justify-between">
+              <span>Perubahan Kuantitas:</span>
+              <span class="font-mono font-black">
+                {{ adjustDiff > 0 ? `+${adjustDiff}` : adjustDiff }} pcs
+              </span>
+            </div>
+            <div class="text-[11px] mt-1 leading-relaxed">
+              <span v-if="adjustDiff > 0">
+                &bull; Stok bertambah. Perubahan akan <strong>dicatat otomatis di Riwayat Batch Stok Masuk</strong>.
+              </span>
+              <span v-else-if="adjustDiff < 0">
+                &bull; Stok berkurang. Perubahan akan <strong>dicatat otomatis di Riwayat Mutasi Pengurangan</strong>.
+              </span>
+              <span v-else>
+                &bull; Tidak ada perubahan kuantitas stok fisik.
+              </span>
+            </div>
+          </div>
+
+          <!-- Keterangan / Catatan (Opsional) -->
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
+              Keterangan / Catatan (Opsional)
+            </label>
+            <input
+              v-model="adjustNotes"
+              type="text"
+              placeholder="cth: Penyesuaian stok opname fisik mingguan"
+              class="w-full px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-600"
+            />
+          </div>
+
+          <!-- Tombol Aksi -->
+          <div class="flex justify-end space-x-2 pt-2 border-t border-slate-100">
+            <button
+              type="button"
+              @click="showAdjustModal = false"
+              class="px-4 py-2 border border-slate-200 text-slate-700 rounded-xl text-xs font-bold hover:bg-slate-50 transition cursor-pointer"
+            >
+              Batal
+            </button>
+            <button
+              type="submit"
+              :disabled="isSavingAdjust"
+              class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold disabled:opacity-50 transition cursor-pointer flex items-center space-x-1.5"
+            >
+              <span v-if="isSavingAdjust">Menyimpan...</span>
+              <span v-else>Simpan Perubahan</span>
             </button>
           </div>
         </form>

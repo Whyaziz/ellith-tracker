@@ -7,6 +7,7 @@ import {
   createStockMutation,
   getStockMutations,
   getStockOverview,
+  adjustDirectStock,
 } from '../services/stockService.js';
 
 export const stockRouter = Router();
@@ -79,6 +80,26 @@ stockRouter.post('/mutations', requireAuth, async (req, res, next) => {
     });
 
     res.status(201).json({ message: 'Mutasi penyesuaian stok berhasil dicatat', mutation });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ----------------- PENYESUAIAN STOK LANGSUNG -----------------
+
+stockRouter.post('/adjust', requireAuth, async (req, res, next) => {
+  try {
+    const { seller_sku, target_stock, notes } = req.body;
+    const userId = req.session.user!.id;
+
+    const result = await adjustDirectStock({
+      seller_sku,
+      target_stock: Number(target_stock),
+      notes,
+      userId,
+    });
+
+    res.json(result);
   } catch (err) {
     next(err);
   }

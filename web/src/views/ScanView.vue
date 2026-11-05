@@ -147,25 +147,26 @@ async function submitClearLogs() {
 }
 
 function focusInput() {
-  if (showModal.value || showClearLogsModal.value) return;
+  if (showClearLogsModal.value) return;
   nextTick(() => {
-    if (!showModal.value && !showClearLogsModal.value) {
+    if (!showClearLogsModal.value) {
       barcodeInput.value?.focus();
     }
   });
 }
 
 function onBarcodeBlur() {
-  if (showModal.value || showClearLogsModal.value) return;
+  if (showClearLogsModal.value) return;
   setTimeout(() => {
-    if (showModal.value || showClearLogsModal.value) return;
+    if (showClearLogsModal.value) return;
     const activeEl = document.activeElement;
     if (
       activeEl &&
       (activeEl.tagName === 'INPUT' ||
         activeEl.tagName === 'BUTTON' ||
         activeEl.tagName === 'SELECT' ||
-        activeEl.tagName === 'TEXTAREA')
+        activeEl.tagName === 'TEXTAREA') &&
+      activeEl !== barcodeInput.value
     ) {
       return;
     }
@@ -266,14 +267,29 @@ function closeModal() {
   focusInput();
 }
 
+let pendingBarcode: string | null = null;
+
 // Handle scan submit
 async function handleScan() {
   const code = barcodeQuery.value.trim();
-  if (!code || isScanning.value) return;
+  if (!code) return;
+
+  if (isScanning.value) {
+    // Jika scan sebelumnya masih dalam perjalanan API, tampung barcode antrean berikutnya
+    pendingBarcode = code;
+    barcodeQuery.value = '';
+    return;
+  }
 
   isScanning.value = true;
   errorMessage.value = null;
   toastMessage.value = null;
+
+  // Hentikan countdown modal sebelumnya jika masih aktif
+  if (countdownInterval) {
+    clearInterval(countdownInterval);
+    countdownInterval = null;
+  }
 
   try {
     const res = await api.post<ScanResponse>('/api/scan', {
@@ -295,7 +311,8 @@ async function handleScan() {
     }
 
     startCountdown();
-    await loadLogsAndStats();
+    // Jalankan pembaruan log di latar belakang tanpa memblokir kesiapan scan berikutnya
+    loadLogsAndStats();
   } catch (err: unknown) {
     playAudioFeedback('error');
     if (err instanceof ApiError) {
@@ -305,6 +322,13 @@ async function handleScan() {
     }
   } finally {
     isScanning.value = false;
+    focusInput();
+    if (pendingBarcode) {
+      const nextCode = pendingBarcode;
+      pendingBarcode = null;
+      barcodeQuery.value = nextCode;
+      handleScan();
+    }
   }
 }
 
@@ -365,25 +389,28 @@ function handleGlobalKeydown(e: KeyboardEvent) {
     }
   }
 
-  // If Enter pressed while scan result modal is open, quickly dismiss modal to continue scanning
-  if (e.key === 'Enter' && showModal.value) {
-    closeModal();
-    return;
-  }
-
   // Jika modal pembersihan riwayat sedang terbuka, biarkan user mengetik password tanpa gangguan
   if (showClearLogsModal.value) {
     return;
   }
 
-  // Jika fokus sedang berada di input/textarea/select lain, jangan rebut fokus
-  const activeTag = document.activeElement?.tagName;
-  if (activeTag === 'INPUT' || activeTag === 'TEXTAREA' || activeTag === 'SELECT') {
+  // Jika Enter ditekan saat modal scan terbuka DAN barcodeQuery kosong, tutup modal
+  if (e.key === 'Enter' && showModal.value && !barcodeQuery.value.trim()) {
+    closeModal();
     return;
   }
 
-  // Auto focus input barcode jika user mulai mengetik/scan saat tidak ada modal aktif
-  if (!showModal.value && !showClearLogsModal.value && document.activeElement !== barcodeInput.value) {
+  // Jika fokus sedang berada di input/textarea/select lain selain barcodeInput, jangan rebut fokus
+  const activeTag = document.activeElement?.tagName;
+  if (
+    document.activeElement !== barcodeInput.value &&
+    (activeTag === 'INPUT' || activeTag === 'TEXTAREA' || activeTag === 'SELECT')
+  ) {
+    return;
+  }
+
+  // Auto focus input barcode jika scanner/user mulai mengetik
+  if (document.activeElement !== barcodeInput.value) {
     if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
       barcodeInput.value?.focus();
     }
@@ -1052,7 +1079,14 @@ onUnmounted(() => {
               class="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2 flex items-center justify-between"
             >
               <span>Rincian Barang yang Harus Dikemas ({{ activeScan.items.length }} Item)</span>
-              <span class="text-slate-500 font-semibold text-xs">
+              <span
+                class="font-bold text-xs px-2 py-0.5 rounded-md"
+                :class="
+                  activeScan.items.reduce((sum, it) => sum + it.qty, 0) > 1
+                    ? 'bg-rose-100 text-rose-800 border border-rose-300 ring-2 ring-rose-200'
+                    : 'text-slate-600 bg-slate-100'
+                "
+              >
                 Total Qty: {{ activeScan.items.reduce((sum, it) => sum + it.qty, 0) }} pcs
               </span>
             </div>
@@ -1073,10 +1107,17 @@ onUnmounted(() => {
                     <td class="px-3.5 py-2 text-slate-500 font-mono">
                       {{ item.seller_sku ?? '-' }}
                     </td>
-                    <td
-                      class="px-3.5 py-2 text-center font-bold text-slate-900 bg-slate-50/60 font-mono"
-                    >
-                      {{ item.qty }}
+                    <td class="px-3.5 py-2 text-center font-mono">
+                      <span
+                        class="inline-flex items-center justify-center min-w-[26px] px-1.5 py-0.5 rounded-md text-xs font-mono"
+                        :class="[
+                          item.qty > 1
+                            ? 'bg-rose-600 text-white shadow-xs font-black ring-2 ring-rose-300'
+                            : 'bg-slate-100 text-slate-900 font-bold border border-slate-200',
+                        ]"
+                      >
+                        {{ item.qty }}
+                      </span>
                     </td>
                   </tr>
                 </tbody>

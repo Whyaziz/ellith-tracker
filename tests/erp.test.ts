@@ -14,6 +14,7 @@ import {
   createStockBatch,
   createStockMutation,
   getStockOverview,
+  adjustDirectStock,
 } from '../server/src/services/stockService.js';
 import {
   createOfflineOrder,
@@ -148,6 +149,52 @@ describe('Garment Mini-ERP Integration Tests', () => {
       const itemStock = stockList.find((s) => s.seller_sku === testSellerSku);
       expect(itemStock!.total_mutation_out).toBe(5);
       expect(itemStock!.available_stock).toBe(45);
+    });
+
+    it('directly adjusts stock up and down with automatic batch or mutation recording and optional notes', async () => {
+      const adjSku = `TEST-ADJ-${Date.now()}`;
+      await createProduct({
+        seller_sku: adjSku,
+        name: 'Produk Uji Adjust Stok',
+        category_id: testCategoryId,
+        min_stock: 5,
+        max_stock: 50,
+      });
+      // Initial batch in: 20 pcs
+      await createStockBatch({
+        batch_code: `BATCH-ADJ-${Date.now()}`,
+        items: [{ seller_sku: adjSku, qty: 20 }],
+        userId: testUserId,
+      });
+
+      // Direct adjustment up: 20 -> 35 (+15)
+      const resUp = await adjustDirectStock({
+        seller_sku: adjSku,
+        target_stock: 35,
+        userId: testUserId,
+      });
+      expect(resUp.action).toBe('batch_in');
+      expect(resUp.diff).toBe(15);
+      expect(resUp.new_stock).toBe(35);
+
+      // Direct adjustment down: 35 -> 28 (-7)
+      const resDown = await adjustDirectStock({
+        seller_sku: adjSku,
+        target_stock: 28,
+        userId: testUserId,
+      });
+      expect(resDown.action).toBe('mutation_out');
+      expect(resDown.diff).toBe(-7);
+      expect(resDown.new_stock).toBe(28);
+
+      // Mutation with optional notes
+      const mutOpt = await createStockMutation({
+        seller_sku: adjSku,
+        type: 'selisih_kurang',
+        qty: 1,
+        userId: testUserId,
+      });
+      expect(mutOpt.notes).toBe('Mutasi penyesuaian stok');
     });
   });
 

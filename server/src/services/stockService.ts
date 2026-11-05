@@ -27,7 +27,14 @@ export interface CreateStockMutationInput {
   seller_sku: string;
   type: 'barang_rusak' | 'barang_hilang' | 'selisih_kurang';
   qty: number;
-  notes: string;
+  notes?: string | null;
+  userId: number;
+}
+
+export interface DirectStockAdjustmentInput {
+  seller_sku: string;
+  target_stock: number;
+  notes?: string | null;
   userId: number;
 }
 
@@ -170,9 +177,7 @@ export async function createStockMutation(input: CreateStockMutationInput) {
   if (typeof input.qty !== 'number' || input.qty <= 0) {
     throw new Error('Kuantitas mutasi harus lebih besar dari 0');
   }
-  if (!input.notes || !input.notes.trim()) {
-    throw new Error('Alasan mutasi barang wajib diisi');
-  }
+  const finalNotes = input.notes?.trim() || 'Mutasi penyesuaian stok';
 
   const prod = await findProductBySellerSku(cleanSku);
 
@@ -183,12 +188,89 @@ export async function createStockMutation(input: CreateStockMutationInput) {
       seller_sku: prod?.seller_sku ?? cleanSku,
       type: input.type,
       qty: input.qty,
-      notes: input.notes.trim(),
+      notes: finalNotes,
       created_by: input.userId,
     })
     .returning();
 
   return mutation;
+}
+
+// ----------------- PENYESUAIAN STOK LANGSUNG (DIRECT STOCK ADJUSTMENT) -----------------
+
+export async function adjustDirectStock(input: DirectStockAdjustmentInput) {
+  const cleanSku = input.seller_sku.trim();
+  if (!cleanSku) throw new Error('Seller SKU tidak boleh kosong');
+  if (typeof input.target_stock !== 'number' || input.target_stock < 0) {
+    throw new Error('Jumlah stok target harus berupa angka 0 atau lebih');
+  }
+
+  const prod = await findProductBySellerSku(cleanSku);
+  if (!prod) {
+    throw new Error(`Produk dengan SKU "${cleanSku}" tidak ditemukan`);
+  }
+
+  // Hitung stok tersedia saat ini
+  const overview = await getStockOverview({ search: cleanSku });
+  const currentItem = overview.find(
+    (it) => it.seller_sku.toLowerCase() === cleanSku.toLowerCase()
+  );
+  const currentStock = currentItem ? currentItem.available_stock : 0;
+  const diff = input.target_stock - currentStock;
+  const customNotes = input.notes?.trim();
+
+  if (diff > 0) {
+    // Stok bertambah -> Catat otomatis sebagai Batch Stok Masuk
+    const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+    const batch_code = `ADJ-IN-${today}-${randomSuffix}`;
+    const autoNotes = customNotes || `Penyesuaian stok langsung (+${diff} pcs, dari ${currentStock} ke ${input.target_stock})`;
+
+    const batch = await createStockBatch({
+      batch_code,
+      notes: autoNotes,
+      items: [{ seller_sku: cleanSku, qty: diff }],
+      userId: input.userId,
+    });
+
+    return {
+      action: 'batch_in',
+      diff,
+      previous_stock: currentStock,
+      new_stock: input.target_stock,
+      batch_code: batch.batch_code,
+      message: `Stok berhasil ditambah +${diff} pcs dan dicatat di Riwayat Batch Stok Masuk (${batch.batch_code})`,
+    };
+  } else if (diff < 0) {
+    // Stok berkurang -> Catat otomatis sebagai Mutasi Stok Pengurangan
+    const reduction = Math.abs(diff);
+    const autoNotes = customNotes || `Penyesuaian stok langsung (-${reduction} pcs, dari ${currentStock} ke ${input.target_stock})`;
+
+    const mutation = await createStockMutation({
+      seller_sku: cleanSku,
+      type: 'selisih_kurang',
+      qty: reduction,
+      notes: autoNotes,
+      userId: input.userId,
+    });
+
+    return {
+      action: 'mutation_out',
+      diff,
+      previous_stock: currentStock,
+      new_stock: input.target_stock,
+      mutation_id: mutation.id,
+      message: `Stok berhasil dikurangi -${reduction} pcs dan dicatat di Riwayat Mutasi Pengurangan`,
+    };
+  } else {
+    return {
+      action: 'no_change',
+      diff: 0,
+      previous_stock: currentStock,
+      new_stock: input.target_stock,
+      message: 'Jumlah stok tidak mengalami perubahan',
+    };
+  }
 }
 
 export async function getStockMutations() {

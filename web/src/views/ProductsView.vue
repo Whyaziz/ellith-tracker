@@ -98,7 +98,60 @@ const filteredProducts = computed(() => {
   });
 });
 
-// Pagination State
+interface CategoryProductGroup {
+  id: number;
+  name: string;
+  items: Product[];
+}
+
+const groupedProducts = computed<CategoryProductGroup[]>(() => {
+  const map: Record<number, CategoryProductGroup> = {};
+
+  for (const c of categories.value) {
+    if (selectedCategoryId.value && c.id !== selectedCategoryId.value) continue;
+    map[c.id] = { id: c.id, name: c.name, items: [] };
+  }
+  map[0] = { id: 0, name: 'Tanpa Kategori', items: [] };
+
+  for (const p of filteredProducts.value) {
+    const cId = p.category_id || 0;
+    if (!map[cId]) {
+      const cName = categoryMap.value[cId] || 'Kategori Lainnya';
+      map[cId] = { id: cId, name: cName, items: [] };
+    }
+    map[cId].items.push(p);
+  }
+
+  return Object.values(map)
+    .filter((g) => g.items.length > 0)
+    .sort((a, b) => a.name.localeCompare(b.name));
+});
+
+// Expand / Collapse state per Kategori
+const collapsedCategories = ref<Record<number, boolean>>({});
+
+function isCategoryExpanded(catId: number): boolean {
+  if (searchQuery.value.trim()) return true; // Otomatis buka jika sedang mencari
+  return !collapsedCategories.value[catId];
+}
+
+function toggleCategory(catId: number) {
+  collapsedCategories.value[catId] = !collapsedCategories.value[catId];
+}
+
+function expandAllCategories() {
+  collapsedCategories.value = {};
+}
+
+function collapseAllCategories() {
+  const map: Record<number, boolean> = {};
+  for (const g of groupedProducts.value) {
+    map[g.id] = true;
+  }
+  collapsedCategories.value = map;
+}
+
+// Pagination State (Jika dibutuhkan untuk kategori banyak)
 const currentPage = ref(1);
 const pageSize = ref(25);
 
@@ -397,100 +450,153 @@ onMounted(() => {
         </div>
       </div>
 
-      <!-- Products Table -->
-      <div class="bg-white border border-slate-200/80 rounded-3xl shadow-sm overflow-hidden">
-        <div v-if="isLoading" class="p-8 text-center text-xs text-slate-400">
-          Memuat data produk...
+      <!-- Products List Accordion per Kategori -->
+      <div v-if="isLoading" class="bg-white border border-slate-200/80 rounded-3xl p-8 text-center text-xs text-slate-400">
+        Memuat data produk...
+      </div>
+
+      <div v-else-if="filteredProducts.length === 0" class="bg-white border border-slate-200/80 rounded-3xl p-10 text-center text-xs text-slate-500 font-medium">
+        Tidak ada produk yang sesuai dengan kriteria pencarian.
+      </div>
+
+      <div v-else class="space-y-4">
+        <!-- Kontrol Buka / Tutup Semua Kategori -->
+        <div class="flex flex-wrap items-center justify-between text-xs px-1 text-slate-500 gap-2">
+          <div>
+            Menampilkan <strong>{{ filteredProducts.length }}</strong> SKU dalam <strong>{{ groupedProducts.length }}</strong> kategori
+          </div>
+          <div class="flex items-center space-x-2">
+            <button
+              type="button"
+              @click="expandAllCategories"
+              class="text-indigo-600 hover:text-indigo-800 font-bold hover:underline cursor-pointer"
+            >
+              Buka Semua
+            </button>
+            <span>&bull;</span>
+            <button
+              type="button"
+              @click="collapseAllCategories"
+              class="text-slate-600 hover:text-slate-800 font-bold hover:underline cursor-pointer"
+            >
+              Tutup Semua
+            </button>
+          </div>
         </div>
 
-        <div v-else-if="filteredProducts.length === 0" class="p-10 text-center text-xs text-slate-500 font-medium">
-          Tidak ada produk yang sesuai dengan kriteria pencarian.
-        </div>
-
-        <div v-else class="overflow-x-auto">
-          <table class="min-w-full divide-y divide-slate-100 text-left text-xs">
-            <thead class="bg-slate-50 text-slate-700 font-bold uppercase tracking-wider">
-              <tr>
-                <th class="px-4 py-3">Produk</th>
-                <th class="px-4 py-3">Seller SKU</th>
-                <th class="px-4 py-3">Kategori</th>
-                <th class="px-4 py-3 text-center">Ambang Stok</th>
-                <th class="px-4 py-3 text-right">Aksi</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-100 bg-white">
-              <tr v-for="p in paginatedProducts" :key="p.id" class="hover:bg-slate-50/70 transition">
-                <!-- Foto & Nama -->
-                <td class="px-4 py-3 align-middle">
-                  <div class="flex items-center space-x-3">
-                    <div class="w-11 h-11 rounded-xl bg-slate-100 border border-slate-200 overflow-hidden shrink-0 flex items-center justify-center">
-                      <img
-                        v-if="p.image_url"
-                        :src="p.image_url"
-                        alt="Foto Produk"
-                        class="w-full h-full object-cover"
-                      />
-                      <svg v-else class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
-                    </div>
-                    <div>
-                      <div class="font-bold text-slate-900 line-clamp-1">{{ p.name }}</div>
-                      <div class="text-[10px] text-slate-400">ID: #{{ p.id }}</div>
-                    </div>
-                  </div>
-                </td>
-
-                <!-- Seller SKU -->
-                <td class="px-4 py-3 align-middle font-mono font-bold text-slate-900 whitespace-nowrap">
-                  {{ p.seller_sku }}
-                </td>
-
-                <!-- Kategori -->
-                <td class="px-4 py-3 align-middle whitespace-nowrap">
-                  <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-800 border border-slate-200">
-                    {{ categoryMap[p.category_id] || 'Lainnya' }}
+        <!-- Daftar Accordion Dropdown per Kategori -->
+        <div
+          v-for="group in groupedProducts"
+          :key="group.id"
+          class="bg-white border border-slate-200/80 rounded-3xl shadow-xs overflow-hidden transition-all duration-200"
+        >
+          <!-- Accordion Header -->
+          <button
+            type="button"
+            @click="toggleCategory(group.id)"
+            class="w-full px-5 py-4 flex items-center justify-between bg-slate-50/80 hover:bg-slate-100/80 border-b border-slate-100 transition cursor-pointer text-left select-none"
+          >
+            <div class="flex items-center space-x-3">
+              <span class="w-8 h-8 rounded-xl bg-indigo-50 border border-indigo-200/60 text-indigo-700 flex items-center justify-center font-bold text-xs shrink-0">
+                📁
+              </span>
+              <div>
+                <h4 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+                  {{ group.name }}
+                  <span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-indigo-100/70 text-indigo-800 border border-indigo-200">
+                    {{ group.items.length }} SKU
                   </span>
-                </td>
+                </h4>
+              </div>
+            </div>
 
-                <!-- Batas Stok -->
-                <td class="px-4 py-3 align-middle text-center whitespace-nowrap">
-                  <span class="text-xs font-bold text-slate-700">Min: {{ p.min_stock }}</span>
-                  <span class="text-slate-300 mx-1">&bull;</span>
-                  <span class="text-xs font-bold text-slate-700">Max: {{ p.max_stock }}</span>
-                </td>
+            <div class="flex items-center space-x-2">
+              <span class="text-xs text-slate-400 font-medium hidden sm:inline">
+                {{ isCategoryExpanded(group.id) ? 'Sembunyikan' : 'Tampilkan' }}
+              </span>
+              <svg
+                class="w-5 h-5 text-slate-400 transform transition-transform duration-200"
+                :class="isCategoryExpanded(group.id) ? 'rotate-180' : ''"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
+          </button>
 
-                <!-- Aksi -->
-                <td class="px-4 py-3 align-middle text-right whitespace-nowrap">
-                  <div class="flex items-center justify-end space-x-2">
-                    <button
-                      type="button"
-                      @click="openEditProduct(p)"
-                      class="text-xs font-bold text-slate-700 hover:text-slate-900 hover:underline cursor-pointer"
-                    >
-                      Ubah
-                    </button>
-                    <span class="text-slate-200">|</span>
-                    <button
-                      type="button"
-                      @click="deleteProduct(p)"
-                      class="text-xs font-bold text-rose-600 hover:text-rose-800 hover:underline cursor-pointer"
-                    >
-                      Hapus
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+          <!-- Accordion Body (Tabel SKU dalam Kategori) -->
+          <div v-show="isCategoryExpanded(group.id)" class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-slate-100 text-left text-xs">
+              <thead class="bg-slate-50/40 text-slate-600 font-bold uppercase tracking-wider text-[11px]">
+                <tr>
+                  <th class="px-4 py-2.5">Produk</th>
+                  <th class="px-4 py-2.5">Seller SKU</th>
+                  <th class="px-4 py-2.5 text-center">Ambang Stok</th>
+                  <th class="px-4 py-2.5 text-right">Aksi</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100 bg-white">
+                <tr v-for="p in group.items" :key="p.id" class="hover:bg-slate-50/70 transition">
+                  <!-- Foto & Nama -->
+                  <td class="px-4 py-3 align-middle">
+                    <div class="flex items-center space-x-3">
+                      <div class="w-10 h-10 rounded-xl bg-slate-100 border border-slate-200 overflow-hidden shrink-0 flex items-center justify-center">
+                        <img
+                          v-if="p.image_url"
+                          :src="p.image_url"
+                          alt="Foto"
+                          class="w-full h-full object-cover"
+                        />
+                        <svg v-else class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <div class="font-bold text-slate-900 line-clamp-1">{{ p.name }}</div>
+                        <div class="text-[10px] text-slate-400 font-mono">ID: #{{ p.id }}</div>
+                      </div>
+                    </div>
+                  </td>
+
+                  <!-- Seller SKU -->
+                  <td class="px-4 py-3 align-middle font-mono font-bold text-slate-900 whitespace-nowrap">
+                    {{ p.seller_sku }}
+                  </td>
+
+                  <!-- Batas Stok -->
+                  <td class="px-4 py-3 align-middle text-center whitespace-nowrap">
+                    <span class="text-xs font-semibold text-slate-700">Min: {{ p.min_stock }}</span>
+                    <span class="text-slate-300 mx-1">&bull;</span>
+                    <span class="text-xs font-semibold text-slate-700">Max: {{ p.max_stock }}</span>
+                  </td>
+
+                  <!-- Aksi -->
+                  <td class="px-4 py-3 align-middle text-right whitespace-nowrap">
+                    <div class="flex items-center justify-end space-x-2">
+                      <button
+                        type="button"
+                        @click="openEditProduct(p)"
+                        class="text-xs font-bold text-slate-700 hover:text-slate-900 hover:underline cursor-pointer"
+                      >
+                        Ubah
+                      </button>
+                      <span class="text-slate-200">|</span>
+                      <button
+                        type="button"
+                        @click="deleteProduct(p)"
+                        class="text-xs font-bold text-rose-600 hover:text-rose-800 hover:underline cursor-pointer"
+                      >
+                        Hapus
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
-
-        <!-- Pagination Footer -->
-        <Pagination
-          v-model:currentPage="currentPage"
-          v-model:pageSize="pageSize"
-          :totalItems="filteredProducts.length"
-        />
       </div>
     </div>
 

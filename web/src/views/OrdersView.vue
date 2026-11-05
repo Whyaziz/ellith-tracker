@@ -1196,7 +1196,12 @@ onUnmounted(() => {
               <td class="px-2 py-3 w-[55px] align-top text-center whitespace-nowrap">
                 <span
                   v-if="order.items[0]"
-                  class="inline-flex items-center justify-center min-w-[26px] px-1.5 py-0.5 rounded-md font-black text-xs bg-slate-100 text-slate-900 border border-slate-200 font-mono"
+                  class="inline-flex items-center justify-center min-w-[26px] px-1.5 py-0.5 rounded-md text-xs font-mono"
+                  :class="[
+                    order.items[0].qty > 1
+                      ? 'bg-rose-600 text-white shadow-xs font-black ring-2 ring-rose-300'
+                      : 'bg-slate-100 text-slate-900 font-black border border-slate-200',
+                  ]"
                 >
                   {{ order.items[0].qty }}
                 </span>
@@ -1335,7 +1340,12 @@ onUnmounted(() => {
               <!-- 5. Qty -->
               <td class="px-2 py-2.5 w-[55px] align-top text-center whitespace-nowrap">
                 <span
-                  class="inline-flex items-center justify-center min-w-[26px] px-1.5 py-0.5 rounded-md font-black text-xs bg-slate-100 text-slate-900 border border-slate-200 font-mono"
+                  class="inline-flex items-center justify-center min-w-[26px] px-1.5 py-0.5 rounded-md text-xs font-mono"
+                  :class="[
+                    item.qty > 1
+                      ? 'bg-rose-600 text-white shadow-xs font-black ring-2 ring-rose-300'
+                      : 'bg-slate-100 text-slate-900 font-black border border-slate-200',
+                  ]"
                 >
                   {{ item.qty }}
                 </span>
@@ -1647,7 +1657,8 @@ onUnmounted(() => {
                       {{ it.seller_sku || '-' }}
                     </td>
                     <td
-                      class="px-3.5 py-2.5 text-center font-bold text-slate-900 bg-slate-50/50 font-mono"
+                      class="px-3.5 py-2.5 text-center font-mono"
+                      :class="it.qty > 1 ? 'font-black text-rose-600 bg-rose-50/50' : 'font-bold text-slate-900 bg-slate-50/50'"
                     >
                       {{ it.qty }}
                     </td>

@@ -722,7 +722,12 @@ onMounted(() => {
               <td class="px-2 py-3 w-[55px] align-top text-center whitespace-nowrap">
                 <span
                   v-if="o.items[0]"
-                  class="inline-flex items-center justify-center min-w-[26px] px-1.5 py-0.5 rounded-md font-black text-xs bg-slate-100 text-slate-900 border border-slate-200 font-mono tabular-nums"
+                  class="inline-flex items-center justify-center min-w-[26px] px-1.5 py-0.5 rounded-md text-xs font-mono tabular-nums"
+                  :class="[
+                    o.items[0].qty > 1
+                      ? 'bg-rose-600 text-white shadow-xs font-black ring-2 ring-rose-300'
+                      : 'bg-slate-100 text-slate-900 font-black border border-slate-200',
+                  ]"
                 >
                   {{ o.items[0].qty }}
                 </span>
@@ -870,7 +875,12 @@ onMounted(() => {
               <!-- Qty (Item N) -->
               <td class="px-2 py-2.5 w-[55px] align-top text-center whitespace-nowrap">
                 <span
-                  class="inline-flex items-center justify-center min-w-[26px] px-1.5 py-0.5 rounded-md font-black text-xs bg-slate-100 text-slate-900 border border-slate-200 font-mono tabular-nums"
+                  class="inline-flex items-center justify-center min-w-[26px] px-1.5 py-0.5 rounded-md text-xs font-mono tabular-nums"
+                  :class="[
+                    it.qty > 1
+                      ? 'bg-rose-600 text-white shadow-xs font-black ring-2 ring-rose-300'
+                      : 'bg-slate-100 text-slate-900 font-black border border-slate-200',
+                  ]"
                 >
                   {{ it.qty }}
                 </span>
@@ -966,7 +976,12 @@ onMounted(() => {
                 <div class="text-[11px] text-slate-600">{{ it.product_name }}</div>
               </div>
               <div class="text-right">
-                <div class="font-mono font-bold text-slate-900">{{ it.qty }} pcs</div>
+                <div
+                  class="font-mono"
+                  :class="it.qty > 1 ? 'font-black text-rose-600' : 'font-bold text-slate-900'"
+                >
+                  {{ it.qty }} pcs
+                </div>
                 <div v-if="it.price" class="text-[10px] text-slate-500">
                   @ {{ formatCurrency(it.price) }}
                 </div>
