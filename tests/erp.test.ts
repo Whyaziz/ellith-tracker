@@ -21,6 +21,13 @@ import {
   getOfflineOrders,
   updateOfflineOrder,
 } from '../server/src/services/offlineOrderService.js';
+import {
+  createCustomer,
+  getCustomers,
+  getCustomerById,
+  updateCustomer,
+  deleteCustomer,
+} from '../server/src/services/customerService.js';
 import { getDashboardData } from '../server/src/services/dashboardService.js';
 import { eq } from 'drizzle-orm';
 
@@ -309,6 +316,70 @@ describe('Garment Mini-ERP Integration Tests', () => {
         expect(alert.health_action).toBeDefined();
         expect(alert.health_action.length).toBeGreaterThan(5);
       }
+    });
+  });
+
+  describe('7. Customer Relationship Management (CRM)', () => {
+    it('creates, retrieves, updates, and calculates total items purchased for customers', async () => {
+      const custName = `Customer Test Sukma ${Date.now()}`;
+      const phone = '08123456789';
+
+      // 1. Create customer
+      const created = await createCustomer({
+        name: custName,
+        phone,
+        email: 'sukma@example.com',
+        channel: 'offline',
+        notes: 'Pelanggan setia grosir',
+      });
+
+      expect(created.id).toBeDefined();
+      expect(created.name).toBe(custName);
+      expect(created.channel).toBe('offline');
+
+      // 2. Initial purchase total should be 0
+      const initialDetail = await getCustomerById(created.id);
+      expect(initialDetail?.total_items_purchased).toBe(0);
+      expect(initialDetail?.orders.length).toBe(0);
+
+      // 3. Create offline order linked to this customer with 25 pcs total items
+      await createOfflineOrder({
+        order_date: new Date().toISOString().slice(0, 10),
+        customer_id: created.id,
+        customer_name: custName,
+        customer_phone: phone,
+        status: 'selesai',
+        userId: testUserId,
+        items: [
+          { seller_sku: testSellerSku, qty: 15, price: 150000 },
+          { seller_sku: testSellerSku, qty: 10, price: 150000 },
+        ],
+      });
+
+      // 4. Retrieve customers list and verify total_items_purchased is strictly 25 pcs
+      const list = await getCustomers({ search: custName });
+      const found = list.find((c) => c.id === created.id);
+      expect(found).toBeDefined();
+      expect(found?.total_items_purchased).toBe(25);
+      expect(found?.total_orders_count).toBe(1);
+
+      // 5. Retrieve detailed profile with order history
+      const detail = await getCustomerById(created.id);
+      expect(detail).toBeDefined();
+      expect(detail?.total_items_purchased).toBe(25);
+      expect(detail?.orders.length).toBe(1);
+      expect(detail?.orders[0].items.length).toBe(2);
+
+      // 6. Update customer channel to omnichannel
+      const updated = await updateCustomer(created.id, { channel: 'omnichannel' });
+      expect(updated?.channel).toBe('omnichannel');
+
+      // 7. Delete customer
+      const del = await deleteCustomer(created.id);
+      expect(del.success).toBe(true);
+
+      const afterDelete = await getCustomerById(created.id);
+      expect(afterDelete).toBeNull();
     });
   });
 });

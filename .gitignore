@@ -10,6 +10,7 @@ node_modules/
 dist/
 web/dist/
 server/public/
+*.tsbuildinfo
 
 # Runtime data & Database (DO NOT COMMIT)
 data/

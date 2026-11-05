@@ -1,6 +1,6 @@
 import { eq, or, like, sql, desc } from 'drizzle-orm';
 import { db } from '../db/client.js';
-import { offline_orders, offline_order_items, products } from '../db/schema.js';
+import { offline_orders, offline_order_items, products, customers } from '../db/schema.js';
 import { findProductBySellerSku } from './productService.js';
 
 export interface CreateOfflineOrderItemInput {
@@ -13,6 +13,7 @@ export interface CreateOfflineOrderItemInput {
 export interface CreateOfflineOrderInput {
   order_no?: string;
   order_date: string;
+  customer_id?: number | null;
   customer_name: string;
   customer_phone?: string | null;
   notes?: string | null;
@@ -23,6 +24,7 @@ export interface CreateOfflineOrderInput {
 
 export interface UpdateOfflineOrderInput {
   order_date?: string;
+  customer_id?: number | null;
   customer_name?: string;
   customer_phone?: string | null;
   notes?: string | null;
@@ -53,11 +55,25 @@ export async function createOfflineOrder(input: CreateOfflineOrderInput) {
     throw new Error(`Nomor pesanan "${order_no}" sudah digunakan`);
   }
 
+  // Cari customer_id jika tidak disuplai secara eksplisit tapi ada customer dengan nama yang cocok
+  let customerId = input.customer_id ?? null;
+  if (!customerId) {
+    const [matchedCustomer] = await db
+      .select()
+      .from(customers)
+      .where(eq(sql`lower(${customers.name})`, input.customer_name.trim().toLowerCase()))
+      .limit(1);
+    if (matchedCustomer) {
+      customerId = matchedCustomer.id;
+    }
+  }
+
   const [order] = await db
     .insert(offline_orders)
     .values({
       order_no,
       order_date: input.order_date,
+      customer_id: customerId,
       customer_name: input.customer_name.trim(),
       customer_phone: input.customer_phone?.trim() || null,
       notes: input.notes?.trim() || null,
@@ -181,6 +197,7 @@ export async function updateOfflineOrder(id: number, input: UpdateOfflineOrderIn
   const updateFields: Partial<typeof offline_orders.$inferInsert> = {};
 
   if (input.order_date !== undefined) updateFields.order_date = input.order_date;
+  if (input.customer_id !== undefined) updateFields.customer_id = input.customer_id;
   if (input.customer_name !== undefined) {
     const name = input.customer_name.trim();
     if (!name) throw new Error('Nama pelanggan tidak boleh kosong');

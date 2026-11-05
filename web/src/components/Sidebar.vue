@@ -250,6 +250,23 @@ function closeMobile() {
             </svg>
             <span class="flex-1">Manajemen Stok</span>
           </RouterLink>
+
+          <!-- 7. CRM Pelanggan -->
+          <RouterLink
+            to="/customers"
+            @click="closeMobile"
+            class="flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition cursor-pointer"
+            :class="[
+              route.path === '/customers'
+                ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/25'
+                : 'text-slate-600 hover:text-indigo-900 hover:bg-indigo-50/60',
+            ]"
+          >
+            <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+            </svg>
+            <span class="flex-1">CRM Pelanggan</span>
+          </RouterLink>
         </nav>
       </div>
 
@@ -491,6 +508,22 @@ function closeMobile() {
           </svg>
           <span class="flex-1">Manajemen Stok</span>
         </RouterLink>
+
+        <!-- 7. CRM Pelanggan -->
+        <RouterLink
+          to="/customers"
+          class="flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 cursor-pointer group"
+          :class="[
+            route.path === '/customers'
+              ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/25'
+              : 'text-slate-600 hover:text-indigo-900 hover:bg-indigo-50/60',
+          ]"
+        >
+          <svg class="w-5 h-5 shrink-0 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+          </svg>
+          <span class="flex-1">CRM Pelanggan</span>
+        </RouterLink>
       </div>
 
       <!-- Main Navigation Menu (Collapsed - Icon Centered) -->
@@ -599,6 +632,22 @@ function closeMobile() {
         >
           <svg class="w-5 h-5 shrink-0 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+          </svg>
+        </RouterLink>
+
+        <!-- 7. CRM Pelanggan Icon -->
+        <RouterLink
+          to="/customers"
+          class="w-11 h-11 rounded-xl flex items-center justify-center transition-all duration-200 cursor-pointer relative group"
+          :class="[
+            route.path === '/customers'
+              ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/25'
+              : 'text-slate-600 hover:text-indigo-900 hover:bg-indigo-50/60',
+          ]"
+          title="CRM Pelanggan"
+        >
+          <svg class="w-5 h-5 shrink-0 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
           </svg>
         </RouterLink>
       </div>

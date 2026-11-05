@@ -204,6 +204,33 @@ export const stock_mutations = sqliteTable(
   ]
 );
 
+// ----------------- DATA PELANGGAN & CRM -----------------
+export const customers = sqliteTable(
+  'customers',
+  {
+    id: integer('id', { mode: 'number' }).primaryKey({ autoIncrement: true }),
+    name: text('name').notNull(),
+    phone: text('phone'),
+    email: text('email'),
+    address: text('address'),
+    channel: text('channel', { enum: ['offline', 'online', 'omnichannel'] })
+      .notNull()
+      .default('offline'),
+    notes: text('notes'),
+    created_at: text('created_at')
+      .notNull()
+      .default(sql`(CURRENT_TIMESTAMP)`),
+    updated_at: text('updated_at')
+      .notNull()
+      .default(sql`(CURRENT_TIMESTAMP)`),
+  },
+  (table) => [
+    index('customers_name_idx').on(table.name),
+    index('customers_phone_idx').on(table.phone),
+    index('customers_channel_idx').on(table.channel),
+  ]
+);
+
 // ----------------- PESANAN OFFLINE -----------------
 export const offline_orders = sqliteTable(
   'offline_orders',
@@ -211,6 +238,7 @@ export const offline_orders = sqliteTable(
     id: integer('id', { mode: 'number' }).primaryKey({ autoIncrement: true }),
     order_no: text('order_no').notNull().unique(),
     order_date: text('order_date').notNull(),
+    customer_id: integer('customer_id').references(() => customers.id, { onDelete: 'set null' }),
     customer_name: text('customer_name').notNull(),
     customer_phone: text('customer_phone'),
     notes: text('notes'),
@@ -228,6 +256,7 @@ export const offline_orders = sqliteTable(
   },
   (table) => [
     uniqueIndex('offline_orders_no_idx').on(table.order_no),
+    index('offline_orders_customer_id_idx').on(table.customer_id),
     index('offline_orders_status_idx').on(table.status),
     index('offline_orders_date_idx').on(table.order_date),
   ]
@@ -264,5 +293,7 @@ export type Product = typeof products.$inferSelect;
 export type StockBatch = typeof stock_batches.$inferSelect;
 export type StockBatchItem = typeof stock_batch_items.$inferSelect;
 export type StockMutation = typeof stock_mutations.$inferSelect;
+export type Customer = typeof customers.$inferSelect;
+export type NewCustomer = typeof customers.$inferInsert;
 export type OfflineOrder = typeof offline_orders.$inferSelect;
 export type OfflineOrderItem = typeof offline_order_items.$inferSelect;

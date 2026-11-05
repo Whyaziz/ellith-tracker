@@ -1142,10 +1142,13 @@ onUnmounted(() => {
                 </div>
                 <div v-if="order.needs_review" class="mt-1">
                   <span
-                    class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-900 border border-amber-300"
+                    class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-900 border border-amber-300 inline-flex items-center gap-1"
                     :title="order.validation_notes || 'Kuantitas item tidak cocok'"
                   >
-                    ⚠️ Periksa
+                    <svg class="w-3 h-3 text-amber-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    <span>Periksa</span>
                   </span>
                 </div>
               </td>
@@ -1458,7 +1461,7 @@ onUnmounted(() => {
                   @click="copyToClipboard(selectedOrder.resi)"
                   class="text-[11px] font-bold text-slate-700 hover:text-slate-900 bg-white border border-slate-200 px-2 py-0.5 rounded-lg transition cursor-pointer flex items-center gap-1"
                 >
-                  <span v-if="copiedResi" class="text-emerald-600">Tersalin ✓</span>
+                  <span v-if="copiedResi" class="text-emerald-600 font-bold">Tersalin</span>
                   <span v-else>Salin</span>
                 </button>
               </div>

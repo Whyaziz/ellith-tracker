@@ -612,10 +612,10 @@ onMounted(() => {
             class="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900"
           >
             <option value="all">Semua Status Stok</option>
-            <option value="habis">🔴 Stok Habis</option>
-            <option value="menipis">🟡 Stok Menipis</option>
-            <option value="normal">🟢 Stok Normal</option>
-            <option value="berlebih">🔵 Overstock</option>
+            <option value="habis">Stok Habis</option>
+            <option value="menipis">Stok Menipis</option>
+            <option value="normal">Stok Normal</option>
+            <option value="berlebih">Overstock</option>
           </select>
         </div>
       </div>
@@ -669,8 +669,10 @@ onMounted(() => {
             class="w-full px-5 py-4 flex items-center justify-between bg-slate-50/80 hover:bg-slate-100/80 border-b border-slate-100 transition cursor-pointer text-left select-none"
           >
             <div class="flex items-center space-x-3">
-              <span class="w-8 h-8 rounded-xl bg-indigo-50 border border-indigo-200/60 text-indigo-700 flex items-center justify-center font-bold text-xs shrink-0">
-                📦
+              <span class="w-8 h-8 rounded-xl bg-indigo-50 border border-indigo-200/60 text-indigo-700 flex items-center justify-center shrink-0">
+                <svg class="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                </svg>
               </span>
               <div>
                 <h4 class="text-sm font-bold text-slate-900 flex items-center gap-2">
@@ -1254,9 +1256,11 @@ onMounted(() => {
         <div class="flex items-center justify-between border-b border-slate-100 pb-3">
           <div class="flex items-center space-x-2">
             <span
-              class="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-xs font-bold"
+              class="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center shrink-0"
             >
-              ✎
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+              </svg>
             </span>
             <h3 class="text-base font-bold text-slate-900">Ubah Jumlah Stok Fisik</h3>
           </div>

@@ -233,13 +233,15 @@ export async function adjustDirectStock(input: DirectStockAdjustmentInput) {
       userId: input.userId,
     });
 
+    const batchCode = batch?.batch_code || batch_code;
+
     return {
       action: 'batch_in',
       diff,
       previous_stock: currentStock,
       new_stock: input.target_stock,
-      batch_code: batch.batch_code,
-      message: `Stok berhasil ditambah +${diff} pcs dan dicatat di Riwayat Batch Stok Masuk (${batch.batch_code})`,
+      batch_code: batchCode,
+      message: `Stok berhasil ditambah +${diff} pcs dan dicatat di Riwayat Batch Stok Masuk (${batchCode})`,
     };
   } else if (diff < 0) {
     // Stok berkurang -> Catat otomatis sebagai Mutasi Stok Pengurangan

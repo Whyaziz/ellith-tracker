@@ -7,6 +7,7 @@ import { scanRouter } from './scan.routes.js';
 import { productRouter } from './product.routes.js';
 import { stockRouter } from './stock.routes.js';
 import { offlineOrderRouter } from './offlineOrder.routes.js';
+import { customerRouter } from './customer.routes.js';
 import { dashboardRouter } from './dashboard.routes.js';
 
 export const apiRouter = Router();
@@ -19,5 +20,6 @@ apiRouter.use('/scan', scanRouter);
 apiRouter.use('/products', productRouter);
 apiRouter.use('/stock', stockRouter);
 apiRouter.use('/offline-orders', offlineOrderRouter);
+apiRouter.use('/customers', customerRouter);
 apiRouter.use('/dashboard', dashboardRouter);
 

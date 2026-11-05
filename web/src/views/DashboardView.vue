@@ -403,12 +403,12 @@ function renderCategoryChart() {
                 const it = skus[item.dataIndex];
                 const statusLabel =
                   it?.status === 'habis'
-                    ? '🔴 Stok Habis'
+                    ? 'Stok Habis'
                     : it?.status === 'menipis'
-                      ? `🟡 Menipis (< ${it.min_stock})`
+                      ? `Menipis (< ${it.min_stock})`
                       : it?.status === 'berlebih'
-                        ? `🔵 Overstock (> ${it.max_stock})`
-                        : '🟢 Normal';
+                        ? `Overstock (> ${it.max_stock})`
+                        : 'Normal';
                 return [
                   `Stok Tersedia: ${Number(item.raw).toLocaleString('id-ID')} pcs`,
                   `Status: ${statusLabel}`,
@@ -490,7 +490,7 @@ function renderCategoryChart() {
           cornerRadius: 10,
           callbacks: {
             label: (item) => `Stok: ${Number(item.raw).toLocaleString('id-ID')} pcs`,
-            afterLabel: () => '👉 Klik bar untuk rincian SKU',
+            afterLabel: () => 'Klik bar untuk rincian SKU',
           },
         },
       },

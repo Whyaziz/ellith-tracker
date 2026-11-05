@@ -52,9 +52,17 @@ const showOfflineModal = ref(false);
 const isSavingOffline = ref(false);
 const offlineError = ref('');
 
+interface CustomerOption {
+  id: number;
+  name: string;
+  phone: string | null;
+}
+const availableCustomers = ref<CustomerOption[]>([]);
+
 const offlineForm = ref({
   order_no: '',
   order_date: new Date().toISOString().slice(0, 10),
+  customer_id: null as number | null,
   customer_name: '',
   customer_phone: '',
   notes: '',
@@ -70,13 +78,15 @@ const isUpdatingStatus = ref(false);
 async function loadData() {
   isLoading.value = true;
   try {
-    const [onlineRes, offlineRes, prodRes] = await Promise.all([
+    const [onlineRes, offlineRes, prodRes, custRes] = await Promise.all([
       api.get<{ orders: any[] }>('/api/orders?limit=2000'),
       api.get<{ orders: any[] }>('/api/offline-orders'),
       api.get<{ products: Product[] }>('/api/products?limit=1000'),
+      api.get<{ customers: CustomerOption[] }>('/api/customers').catch(() => ({ customers: [] })),
     ]);
 
     availableProducts.value = prodRes.products || [];
+    availableCustomers.value = custRes.customers || [];
 
     const list: UnifiedOrder[] = [];
 
@@ -234,6 +244,7 @@ function openCreateOfflineOrder() {
   offlineForm.value = {
     order_no: '',
     order_date: new Date().toISOString().slice(0, 10),
+    customer_id: null,
     customer_name: '',
     customer_phone: '',
     notes: '',
@@ -249,6 +260,19 @@ function openCreateOfflineOrder() {
   };
   offlineError.value = '';
   showOfflineModal.value = true;
+}
+
+function onCustomerSelected(customerId: number | '') {
+  if (!customerId) {
+    offlineForm.value.customer_id = null;
+    return;
+  }
+  const cust = availableCustomers.value.find((c) => c.id === customerId);
+  if (cust) {
+    offlineForm.value.customer_id = cust.id;
+    offlineForm.value.customer_name = cust.name;
+    if (cust.phone) offlineForm.value.customer_phone = cust.phone;
+  }
 }
 
 function onProductSelect(idx: number) {
@@ -299,6 +323,7 @@ async function submitOfflineOrder() {
     await api.post('/api/offline-orders', {
       order_no: offlineForm.value.order_no.trim() || undefined,
       order_date: offlineForm.value.order_date,
+      customer_id: offlineForm.value.customer_id || undefined,
       customer_name: offlineForm.value.customer_name.trim(),
       customer_phone: offlineForm.value.customer_phone.trim() || undefined,
       notes: offlineForm.value.notes.trim() || undefined,
@@ -1081,6 +1106,24 @@ onMounted(() => {
         </div>
 
         <form @submit.prevent="submitOfflineOrder" class="space-y-4">
+          <!-- Hubungkan ke Pelanggan CRM (Opsional) -->
+          <div v-if="availableCustomers.length > 0" class="bg-indigo-50/60 p-3 rounded-2xl border border-indigo-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <span class="text-xs font-bold text-indigo-950">Pilih dari CRM Pelanggan</span>
+              <p class="text-[11px] text-indigo-600">Otomatis mengisi nama &amp; kontak pelanggan</p>
+            </div>
+            <select
+              :value="offlineForm.customer_id || ''"
+              @change="onCustomerSelected(($event.target as HTMLSelectElement).value ? Number(($event.target as HTMLSelectElement).value) : '')"
+              class="px-3 py-1.5 bg-white border border-indigo-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-600 cursor-pointer"
+            >
+              <option value="">-- Ketik Manual / Pelanggan Baru --</option>
+              <option v-for="c in availableCustomers" :key="c.id" :value="c.id">
+                {{ c.name }} {{ c.phone ? `(${c.phone})` : '' }}
+              </option>
+            </select>
+          </div>
+
           <!-- Info Pelanggan & Tanggal -->
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>

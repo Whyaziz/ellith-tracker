@@ -116,9 +116,10 @@ orderRouter.delete('/:id', requireAuth, async (req, res, next) => {
 
 orderRouter.get('/:resi', requireAuth, async (req, res, next) => {
   try {
-    const order = await getOrderByResi(req.params.resi);
+    const resiParam = Array.isArray(req.params.resi) ? req.params.resi[0] : req.params.resi;
+    const order = await getOrderByResi(resiParam);
     if (!order) {
-      res.status(404).json({ error: `Resi "${req.params.resi}" tidak ditemukan` });
+      res.status(404).json({ error: `Resi "${resiParam}" tidak ditemukan` });
       return;
     }
     res.json({ order });
