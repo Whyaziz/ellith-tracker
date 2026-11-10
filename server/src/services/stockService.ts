@@ -294,6 +294,73 @@ export async function getStockMutations() {
   return rows;
 }
 
+// ----------------- PENCCOCOKAN CERDAS SELLER SKU -----------------
+
+export function normalizeSkuCode(str: string): string {
+  if (!str) return '';
+  return str
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '')
+    .replace(/top/g, 'ats')
+    .replace(/set/g, 'stl')
+    .replace(/jkt/g, 'jk');
+}
+
+/**
+ * Mencocokkan SKU dari label pesanan (misal: "Hitam CLN-Hitam", "PNC-TOP-ARMY")
+ * dengan master produk ("CLN-Hitam", "PNC-ATS-Army").
+ */
+export function isSkuMatch(
+  product: { seller_sku: string; sku_temp?: string | null },
+  rawSku: string | null | undefined
+): boolean {
+  if (!rawSku) return false;
+  const raw = rawSku.trim();
+  const lower = raw.toLowerCase();
+  const targetLower = product.seller_sku.toLowerCase();
+
+  // 1. Exact match (case-insensitive)
+  if (lower === targetLower) return true;
+
+  // 2. sku_temp alias exact / partial match
+  if (product.sku_temp) {
+    const aliases = product.sku_temp.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+    if (aliases.includes(lower)) return true;
+    for (const a of aliases) {
+      if (a.length >= 4 && (lower.includes(a) || a.includes(lower))) return true;
+    }
+  }
+
+  // 3. Token match (split by whitespace/punctuation, e.g. "Hitam CLN-Hitam" -> "cln-hitam")
+  const tokens = raw.split(/[\s,()]+/).map((t) => t.trim().toLowerCase()).filter(Boolean);
+  if (tokens.includes(targetLower)) return true;
+
+  // 4. Normalized code match (PNC-TOP-ARMY vs PNC-ATS-Army, JKT-SET-NAVY vs JK-STL-Navy)
+  const normTarget = normalizeSkuCode(product.seller_sku);
+  const normRaw = normalizeSkuCode(raw);
+  if (normTarget && normRaw === normTarget) return true;
+
+  // 5. Token normalized match
+  for (const token of tokens) {
+    const normToken = normalizeSkuCode(token);
+    if (normToken === normTarget) return true;
+    if (normTarget.length >= 5 && normToken.includes(normTarget)) return true;
+    if (normToken.length >= 5 && normTarget.includes(normToken)) return true;
+  }
+
+  // 6. Substring match jika target SKU cukup spesifik (>= 5 karakter)
+  if (targetLower.length >= 5 && lower.includes(targetLower)) return true;
+
+  // 7. Component words set match (e.g. ATS-PNC-Army vs PNC-ATS-Army)
+  const targetParts = targetLower.split(/[\-_ ]+/).map((s) => s.replace(/top/g, 'ats').replace(/set/g, 'stl')).filter(Boolean);
+  const rawParts = lower.split(/[\-_ ]+/).map((s) => s.replace(/top/g, 'ats').replace(/set/g, 'stl')).filter(Boolean);
+  if (targetParts.length >= 2 && targetParts.every((tp) => rawParts.includes(tp))) {
+    return true;
+  }
+
+  return false;
+}
+
 // ----------------- REKAPITULASI STOK PER SELLER SKU -----------------
 
 export async function getStockOverview(filters?: { search?: string; categoryId?: number }) {
@@ -340,16 +407,8 @@ export async function getStockOverview(filters?: { search?: string; categoryId?:
     .innerJoin(offline_orders, eq(offline_order_items.offline_order_id, offline_orders.id));
 
   const summaries: SkuStockSummary[] = allProducts.map((p) => {
-    const targetSkuLower = p.seller_sku.toLowerCase();
-    const aliasLowerList = (p.sku_temp || '')
-      .split(',')
-      .map((s) => s.trim().toLowerCase())
-      .filter(Boolean);
-
     function isMatch(itemSku: string | null | undefined): boolean {
-      if (!itemSku) return false;
-      const lower = itemSku.trim().toLowerCase();
-      return lower === targetSkuLower || aliasLowerList.includes(lower);
+      return isSkuMatch(p, itemSku);
     }
 
     // 1. Total Masuk dari Stock Batches
@@ -372,17 +431,17 @@ export async function getStockOverview(filters?: { search?: string; categoryId?:
       if (isMatch(item.seller_sku) || isMatch(item.sku)) {
         if (item.status === 'dibatalkan') {
           onlineCanceled += item.qty;
-        } else if (item.status === 'dikirim') {
+        } else if (item.status === 'dikirim' || item.status === 'selesai' || item.status === 'selesai_kirim') {
           onlineShipped += item.qty;
-        } else if (item.status === 'dikemas') {
+        } else if (item.status === 'dikemas' || item.status === 'siap_kirim') {
           onlinePacked += item.qty;
-        } else if (item.status === 'menunggu_dikemas') {
+        } else if (item.status === 'menunggu_dikemas' || item.status === 'belum_dikemas') {
           onlineUnpacked += item.qty;
         }
       }
     }
 
-    // 4. Offline Orders Breakdown
+    // 4. Offline Orders Breakdown (termasuk status siap_kirim dan selesai_kirim dari offline order)
     let offlineUnpacked = 0;
     let offlinePacked = 0;
     let offlineShipped = 0;
@@ -392,11 +451,11 @@ export async function getStockOverview(filters?: { search?: string; categoryId?:
       if (isMatch(item.seller_sku)) {
         if (item.status === 'dibatalkan') {
           offlineCanceled += item.qty;
-        } else if (item.status === 'selesai' || item.status === 'dikirim') {
+        } else if (item.status === 'selesai' || item.status === 'selesai_kirim' || item.status === 'dikirim') {
           offlineShipped += item.qty;
-        } else if (item.status === 'dikemas') {
+        } else if (item.status === 'dikemas' || item.status === 'siap_kirim') {
           offlinePacked += item.qty;
-        } else if (item.status === 'menunggu_dikemas') {
+        } else if (item.status === 'menunggu_dikemas' || item.status === 'belum_dikemas') {
           offlineUnpacked += item.qty;
         }
       }

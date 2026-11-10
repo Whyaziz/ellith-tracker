@@ -187,8 +187,10 @@ export async function getDashboardData(
   const total_orders = onlineOrders.length + offlineOrdersList.length;
 
   const total_shipped_orders =
-    onlineOrders.filter((o) => o.status === 'dikirim').length +
-    offlineOrdersList.filter((o) => o.status === 'dikirim' || o.status === 'selesai').length;
+    onlineOrders.filter((o) => o.status === 'dikirim' || o.status === 'selesai').length +
+    offlineOrdersList.filter(
+      (o) => o.status === 'dikirim' || o.status === 'selesai' || o.status === 'selesai_kirim'
+    ).length;
 
   const total_canceled_orders =
     onlineOrders.filter((o) => o.status === 'dibatalkan').length +

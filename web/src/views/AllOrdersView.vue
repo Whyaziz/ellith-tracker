@@ -75,6 +75,11 @@ const showDetailModal = ref(false);
 const selectedOrder = ref<UnifiedOrder | null>(null);
 const isUpdatingStatus = ref(false);
 
+// Modal Konfirmasi Hapus Pesanan Offline
+const showDeleteConfirmModal = ref(false);
+const orderToDelete = ref<UnifiedOrder | null>(null);
+const isDeletingOffline = ref(false);
+
 async function loadData() {
   isLoading.value = true;
   try {
@@ -93,6 +98,17 @@ async function loadData() {
     // Map Online Orders
     for (const o of onlineRes.orders || []) {
       const totalQty = (o.items || []).reduce((s: number, it: any) => s + (it.qty || 1), 0);
+      let normalizedStatus: 'belum_dikemas' | 'siap_kirim' | 'selesai_kirim' | 'dibatalkan' = 'siap_kirim';
+      if (o.status === 'menunggu_dikemas' || o.status === 'belum_dikemas') {
+        normalizedStatus = 'belum_dikemas';
+      } else if (o.status === 'dikemas' || o.status === 'siap_kirim') {
+        normalizedStatus = 'siap_kirim';
+      } else if (o.status === 'dikirim' || o.status === 'selesai' || o.status === 'selesai_kirim') {
+        normalizedStatus = 'selesai_kirim';
+      } else if (o.status === 'dibatalkan' || o.status === 'batal') {
+        normalizedStatus = 'dibatalkan';
+      }
+
       list.push({
         id: `online_${o.id}`,
         type: 'online',
@@ -102,7 +118,7 @@ async function loadData() {
         customer_phone: o.recipient_phone,
         customer_address: o.recipient_address,
         order_date: o.created_at,
-        status: o.status,
+        status: normalizedStatus,
         items_count: (o.items || []).length,
         total_qty: totalQty,
         raw_online_id: o.id,
@@ -123,6 +139,12 @@ async function loadData() {
         (s: number, it: any) => s + (it.qty || 1) * (it.price || 0),
         0
       );
+      let normalizedStatus: 'belum_dikemas' | 'siap_kirim' | 'selesai_kirim' | 'dibatalkan' = 'siap_kirim';
+      if (off.status === 'belum_dikemas') normalizedStatus = 'belum_dikemas';
+      else if (off.status === 'siap_kirim') normalizedStatus = 'siap_kirim';
+      else if (off.status === 'selesai_kirim' || off.status === 'selesai') normalizedStatus = 'selesai_kirim';
+      else if (off.status === 'dibatalkan') normalizedStatus = 'dibatalkan';
+
       list.push({
         id: `offline_${off.id}`,
         type: 'offline',
@@ -132,7 +154,7 @@ async function loadData() {
         customer_phone: off.customer_phone,
         customer_address: off.notes || '',
         order_date: off.order_date || off.created_at,
-        status: off.status,
+        status: normalizedStatus,
         items_count: (off.items || []).length,
         total_qty: totalQty,
         total_amount: totalAmount,
@@ -367,6 +389,36 @@ async function updateOfflineStatus(newStatus: 'siap_kirim' | 'selesai_kirim' | '
     }
   } finally {
     isUpdatingStatus.value = false;
+  }
+}
+
+// Hapus Pesanan Offline
+function promptDeleteOfflineOrder(o: UnifiedOrder) {
+  orderToDelete.value = o;
+  showDeleteConfirmModal.value = true;
+}
+
+async function executeDeleteOfflineOrder() {
+  if (!orderToDelete.value || !orderToDelete.value.raw_offline_id) return;
+  isDeletingOffline.value = true;
+  try {
+    await api.delete(`/api/offline-orders/${orderToDelete.value.raw_offline_id}`);
+    showDeleteConfirmModal.value = false;
+    // Jika pesanan yang dihapus sedang dibuka di modal detail, tutup modal detail
+    if (selectedOrder.value?.id === orderToDelete.value.id) {
+      showDetailModal.value = false;
+      selectedOrder.value = null;
+    }
+    orderToDelete.value = null;
+    await loadData();
+  } catch (err: unknown) {
+    if (err instanceof ApiError) {
+      alert(`Gagal menghapus pesanan offline: ${err.message}`);
+    } else {
+      alert('Gagal menghapus pesanan offline');
+    }
+  } finally {
+    isDeletingOffline.value = false;
   }
 }
 
@@ -650,7 +702,7 @@ onMounted(() => {
               <th class="px-3.5 py-3 w-[210px]">Data Penerima</th>
               <th class="px-2.5 py-3 w-[105px] text-center">Status Packing</th>
               <th class="px-2.5 py-3 w-[100px] text-center">Status Kirim</th>
-              <th class="px-2.5 py-3 w-[50px] text-center">Aksi</th>
+              <th class="px-2.5 py-3 w-[70px] text-center">Aksi</th>
             </tr>
           </thead>
 
@@ -843,29 +895,48 @@ onMounted(() => {
               <!-- 10. Aksi -->
               <td
                 :rowspan="Math.max(1, o.items.length)"
-                class="px-2.5 py-3 w-[50px] align-top text-center whitespace-nowrap bg-white group-hover:bg-slate-50/70 transition-colors"
+                class="px-2 py-3 w-[70px] align-top text-center whitespace-nowrap bg-white group-hover:bg-slate-50/70 transition-colors"
               >
-                <button
-                  type="button"
-                  @click.stop="openDetail(o)"
-                  class="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition cursor-pointer"
-                  title="Lihat rincian pesanan"
-                >
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                    />
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-                    />
-                  </svg>
-                </button>
+                <div class="flex items-center justify-center space-x-1">
+                  <button
+                    type="button"
+                    @click.stop="openDetail(o)"
+                    class="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition cursor-pointer"
+                    title="Lihat rincian pesanan"
+                  >
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                      />
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                      />
+                    </svg>
+                  </button>
+
+                  <button
+                    v-if="o.type === 'offline'"
+                    type="button"
+                    @click.stop="promptDeleteOfflineOrder(o)"
+                    class="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                    title="Hapus pesanan offline"
+                  >
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                      />
+                    </svg>
+                  </button>
+                </div>
               </td>
             </tr>
 
@@ -1016,37 +1087,59 @@ onMounted(() => {
         </div>
 
         <!-- Status Management (For Offline Orders) -->
-        <div v-if="selectedOrder.type === 'offline'" class="pt-2 border-t border-slate-100">
-          <div class="text-xs font-bold uppercase tracking-wider text-slate-700 mb-2">
-            Ubah Status Pengiriman:
+        <div v-if="selectedOrder.type === 'offline'" class="pt-3 border-t border-slate-100 space-y-3">
+          <div>
+            <div class="text-xs font-bold uppercase tracking-wider text-slate-700 mb-2">
+              Ubah Status Pengiriman:
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+              <button
+                v-if="selectedOrder.status !== 'siap_kirim'"
+                type="button"
+                @click="updateOfflineStatus('siap_kirim')"
+                :disabled="isUpdatingStatus"
+                class="px-3 py-1.5 bg-blue-50 text-blue-700 border border-blue-200 rounded-xl text-xs font-bold hover:bg-blue-100 transition cursor-pointer"
+              >
+                Set Siap Kirim
+              </button>
+              <button
+                v-if="selectedOrder.status !== 'selesai_kirim'"
+                type="button"
+                @click="updateOfflineStatus('selesai_kirim')"
+                :disabled="isUpdatingStatus"
+                class="px-3 py-1.5 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 transition cursor-pointer"
+              >
+                Tandai Selesai Kirim
+              </button>
+              <button
+                v-if="selectedOrder.status !== 'dibatalkan'"
+                type="button"
+                @click="updateOfflineStatus('dibatalkan')"
+                :disabled="isUpdatingStatus"
+                class="px-3 py-1.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold hover:bg-rose-100 transition cursor-pointer"
+              >
+                Batalkan Pesanan
+              </button>
+            </div>
           </div>
-          <div class="flex items-center space-x-2">
+
+          <!-- Danger Action: Hapus Pesanan Offline -->
+          <div class="pt-2 border-t border-slate-100 flex items-center justify-between">
+            <span class="text-xs text-slate-500">Salah input? Hapus pesanan offline ini:</span>
             <button
-              v-if="selectedOrder.status !== 'siap_kirim'"
               type="button"
-              @click="updateOfflineStatus('siap_kirim')"
-              :disabled="isUpdatingStatus"
-              class="px-3 py-1.5 bg-blue-50 text-blue-700 border border-blue-200 rounded-xl text-xs font-bold hover:bg-blue-100 transition cursor-pointer"
+              @click="promptDeleteOfflineOrder(selectedOrder)"
+              class="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition flex items-center space-x-1 cursor-pointer"
             >
-              Set Siap Kirim
-            </button>
-            <button
-              v-if="selectedOrder.status !== 'selesai_kirim'"
-              type="button"
-              @click="updateOfflineStatus('selesai_kirim')"
-              :disabled="isUpdatingStatus"
-              class="px-3 py-1.5 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 transition cursor-pointer"
-            >
-              Tandai Selesai Kirim
-            </button>
-            <button
-              v-if="selectedOrder.status !== 'dibatalkan'"
-              type="button"
-              @click="updateOfflineStatus('dibatalkan')"
-              :disabled="isUpdatingStatus"
-              class="px-3 py-1.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold hover:bg-rose-100 transition cursor-pointer"
-            >
-              Batalkan Pesanan
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                />
+              </svg>
+              <span>Hapus Pesanan</span>
             </button>
           </div>
         </div>
@@ -1290,6 +1383,58 @@ onMounted(() => {
             </button>
           </div>
         </form>
+      </div>
+    </div>
+
+    <!-- MODAL KONFIRMASI HAPUS PESANAN OFFLINE -->
+    <div
+      v-if="showDeleteConfirmModal && orderToDelete"
+      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div
+        class="bg-white rounded-3xl shadow-2xl max-w-sm w-full overflow-hidden border border-slate-200 p-6 space-y-4"
+      >
+        <div
+          class="w-12 h-12 rounded-2xl bg-rose-50 border border-rose-100 text-rose-600 flex items-center justify-center mx-auto"
+        >
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+            />
+          </svg>
+        </div>
+
+        <div class="text-center space-y-1">
+          <h3 class="text-sm font-bold text-slate-900">Hapus Pesanan Offline?</h3>
+          <p class="text-xs text-slate-500">
+            Anda akan menghapus pesanan <strong>#{{ orderToDelete.order_code }}</strong> (Pelanggan:
+            <strong>{{ orderToDelete.customer_name }}</strong
+            >). Tindakan ini tidak dapat dibatalkan dan alokasi stok untuk pesanan ini akan dibatalkan.
+          </p>
+        </div>
+
+        <div class="flex items-center space-x-2 pt-2">
+          <button
+            type="button"
+            @click="showDeleteConfirmModal = false"
+            class="flex-1 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 transition cursor-pointer"
+          >
+            Batal
+          </button>
+          <button
+            type="button"
+            @click="executeDeleteOfflineOrder"
+            :disabled="isDeletingOffline"
+            class="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white text-xs font-bold shadow-sm shadow-rose-500/25 transition cursor-pointer disabled:opacity-50"
+          >
+            {{ isDeletingOffline ? 'Menghapus...' : 'Ya, Hapus' }}
+          </button>
+        </div>
       </div>
     </div>
   </div>

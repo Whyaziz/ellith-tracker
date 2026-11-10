@@ -52,7 +52,7 @@ export const orders = sqliteTable(
     recipient_address: text('recipient_address').notNull(),
     sorting_code: text('sorting_code'),
     status: text('status', {
-      enum: ['menunggu_dikemas', 'dikemas', 'dikirim', 'dibatalkan'],
+      enum: ['menunggu_dikemas', 'dikemas', 'dikirim', 'dibatalkan', 'siap_kirim', 'selesai_kirim', 'selesai', 'belum_dikemas'],
     })
       .notNull()
       .default('menunggu_dikemas'),
@@ -243,7 +243,7 @@ export const offline_orders = sqliteTable(
     customer_phone: text('customer_phone'),
     notes: text('notes'),
     status: text('status', {
-      enum: ['menunggu_dikemas', 'dikemas', 'dikirim', 'selesai', 'dibatalkan'],
+      enum: ['menunggu_dikemas', 'dikemas', 'dikirim', 'selesai', 'dibatalkan', 'siap_kirim', 'selesai_kirim', 'belum_dikemas'],
     })
       .notNull()
       .default('selesai'),

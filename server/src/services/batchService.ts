@@ -5,6 +5,7 @@ import { db } from '../db/client.js';
 import { batches, orders, order_items, scan_logs, products } from '../db/schema.js';
 import { parseJtPdf, type ParsedOrder, type ParsedItem } from '../parsers/jnt.js';
 import { config } from '../config.js';
+import { isSkuMatch } from './stockService.js';
 
 export interface DuplicateInfo {
   batch_id: number;
@@ -84,14 +85,8 @@ export async function enrichOrdersWithDuplicateCheck(
   for (const parsed of ordersList) {
     // Enrich setiap item dengan status kecocokan Seller SKU
     const enrichedItems: EnrichedParsedItem[] = parsed.items.map((it) => {
-      const rawSku = (it.seller_sku || it.sku || '').trim().toLowerCase();
       const matched = allMasterProducts.find((p) => {
-        if (p.seller_sku.toLowerCase() === rawSku) return true;
-        if (p.sku_temp) {
-          const aliases = p.sku_temp.split(',').map((s) => s.trim().toLowerCase());
-          if (aliases.includes(rawSku)) return true;
-        }
-        return false;
+        return isSkuMatch(p, it.seller_sku) || isSkuMatch(p, it.sku);
       });
 
       return {

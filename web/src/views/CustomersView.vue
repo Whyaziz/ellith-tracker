@@ -253,111 +253,145 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="space-y-6">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
     <!-- Header Section -->
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div
+      class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-slate-200/80 pb-5"
+    >
       <div>
-        <h1 class="text-2xl font-black tracking-tight text-slate-900">CRM &amp; Data Pelanggan</h1>
-        <p class="text-xs text-slate-500 font-medium mt-1">
-          Pelacakan profil pelanggan, kontak WhatsApp, kanal transaksi, dan riwayat pembelian barang.
+        <div class="flex items-center space-x-2.5">
+          <h1 class="text-2xl font-bold text-slate-900 tracking-tight">CRM &amp; Data Pelanggan</h1>
+          <span
+            class="text-[10px] font-bold tracking-widest uppercase bg-gradient-to-r from-indigo-600 to-indigo-700 text-white px-2.5 py-0.5 rounded shadow-xs"
+          >
+            ELLITH
+          </span>
+        </div>
+        <p class="text-xs text-slate-500 mt-0.5">
+          Pelacakan profil pelanggan, kontak WhatsApp, preferensi kanal pembelian, dan riwayat detail barang yang dibeli.
         </p>
       </div>
 
-      <div class="flex items-center space-x-2">
+      <!-- Action Buttons -->
+      <div class="flex items-center gap-2">
         <button
           type="button"
           @click="openCreateModal"
-          class="inline-flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-xs font-bold shadow-sm shadow-indigo-500/25 transition cursor-pointer"
+          class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-sm shadow-indigo-500/20 transition flex items-center space-x-1.5 cursor-pointer"
         >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+          <svg
+            class="w-4 h-4 text-emerald-300"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2.5"
+              d="M12 4v16m8-8H4"
+            />
           </svg>
           <span>Tambah Pelanggan</span>
+        </button>
+
+        <button
+          type="button"
+          @click="loadCustomers"
+          class="px-3 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl text-xs font-bold hover:bg-slate-50 transition shadow-sm cursor-pointer"
+          title="Muat Ulang"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+            />
+          </svg>
         </button>
       </div>
     </div>
 
     <!-- KPI Summary Cards -->
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
       <!-- 1. Total Pelanggan -->
-      <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between">
-        <div class="flex items-center justify-between text-slate-500">
-          <span class="text-xs font-bold uppercase tracking-wider">Total Pelanggan</span>
-          <div class="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-            </svg>
-          </div>
+      <div
+        class="bg-gradient-to-br from-slate-50/70 via-white to-white border border-slate-200/80 rounded-2xl p-4 shadow-xs"
+      >
+        <div class="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+          Total Pelanggan
         </div>
-        <div class="mt-3">
-          <span class="text-2xl font-black text-slate-900 tracking-tight tabular-nums">{{ totalCustomersCount }}</span>
-          <span class="text-xs text-slate-400 font-medium ml-1">orang</span>
+        <div class="text-2xl font-extrabold text-slate-900 mt-1 font-mono tabular-nums">
+          {{ totalCustomersCount }}
+          <span class="text-xs text-slate-500 font-medium ml-1">orang</span>
         </div>
       </div>
 
-      <!-- 2. Total Barang Terbeli (pcs) -->
-      <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between">
-        <div class="flex items-center justify-between text-slate-500">
-          <span class="text-xs font-bold uppercase tracking-wider">Total Barang Dibeli</span>
-          <div class="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
-            </svg>
-          </div>
+      <!-- 2. Total Barang Dibeli -->
+      <div
+        class="bg-gradient-to-br from-emerald-50/60 via-white to-white border border-emerald-100/80 rounded-2xl p-4 shadow-xs"
+      >
+        <div class="text-[10px] font-bold uppercase tracking-wider text-emerald-600">
+          Total Barang Dibeli
         </div>
-        <div class="mt-3">
-          <span class="text-2xl font-black text-emerald-600 tracking-tight tabular-nums">{{ totalPurchasedQty.toLocaleString('id-ID') }}</span>
-          <span class="text-xs text-slate-400 font-bold ml-1">pcs</span>
+        <div class="text-2xl font-extrabold text-emerald-700 mt-1 font-mono tabular-nums">
+          {{ totalPurchasedQty.toLocaleString('id-ID') }}
+          <span class="text-xs text-emerald-600 font-bold ml-1">pcs</span>
         </div>
       </div>
 
       <!-- 3. Pelanggan Aktif -->
-      <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between">
-        <div class="flex items-center justify-between text-slate-500">
-          <span class="text-xs font-bold uppercase tracking-wider">Pelanggan Aktif</span>
-          <div class="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          </div>
+      <div
+        class="bg-gradient-to-br from-blue-50/60 via-white to-white border border-blue-100/80 rounded-2xl p-4 shadow-xs"
+      >
+        <div class="text-[10px] font-bold uppercase tracking-wider text-blue-600">
+          Pelanggan Bertransaksi
         </div>
-        <div class="mt-3">
-          <span class="text-2xl font-black text-blue-600 tracking-tight tabular-nums">{{ activeCustomersCount }}</span>
-          <span class="text-xs text-slate-400 font-medium ml-1">bertransaksi</span>
+        <div class="text-2xl font-extrabold text-blue-700 mt-1 font-mono tabular-nums">
+          {{ activeCustomersCount }}
+          <span class="text-xs text-blue-600 font-medium ml-1">orang</span>
         </div>
       </div>
 
       <!-- 4. Rata-rata per Pelanggan -->
-      <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between">
-        <div class="flex items-center justify-between text-slate-500">
-          <span class="text-xs font-bold uppercase tracking-wider">Rata-rata Pembelian</span>
-          <div class="w-8 h-8 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-            </svg>
-          </div>
+      <div
+        class="bg-gradient-to-br from-indigo-50/60 via-white to-white border border-indigo-100/80 rounded-2xl p-4 shadow-xs"
+      >
+        <div class="text-[10px] font-bold uppercase tracking-wider text-indigo-600">
+          Rata-rata Pembelian
         </div>
-        <div class="mt-3">
-          <span class="text-2xl font-black text-purple-700 tracking-tight tabular-nums">{{ avgQtyPerCustomer }}</span>
-          <span class="text-xs text-slate-400 font-bold ml-1">pcs / orang</span>
+        <div class="text-2xl font-extrabold text-indigo-700 mt-1 font-mono tabular-nums">
+          {{ avgQtyPerCustomer }}
+          <span class="text-xs text-indigo-600 font-bold ml-1">pcs / orang</span>
         </div>
       </div>
     </div>
 
     <!-- Filter & Search Controls -->
-    <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col md:flex-row gap-3 items-center justify-between">
-      <div class="flex-1 w-full md:w-auto relative">
-        <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
-        </div>
+    <div
+      class="bg-white border border-slate-200/80 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col md:flex-row gap-3 items-center justify-between"
+    >
+      <div class="flex-1 w-full relative">
         <input
           v-model="searchQuery"
           type="text"
           placeholder="Cari nama pelanggan, nomor telepon/WA, atau alamat..."
-          class="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-600 transition"
+          class="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900 transition"
         />
+        <svg
+          class="w-4 h-4 text-slate-400 absolute left-3 top-2.5"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+          />
+        </svg>
       </div>
 
       <!-- Filter Kanal -->
@@ -365,7 +399,7 @@ onMounted(() => {
         <label class="text-xs font-bold text-slate-500 whitespace-nowrap">Kanal:</label>
         <select
           v-model="selectedChannel"
-          class="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-600 cursor-pointer"
+          class="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900 cursor-pointer"
         >
           <option value="all">Semua Kanal</option>
           <option value="offline">Offline</option>
@@ -398,7 +432,7 @@ onMounted(() => {
               <th class="px-3 py-3.5 w-[110px] text-center">Kanal</th>
               <th class="px-3.5 py-3.5 w-[140px] text-center">Total Pembelian</th>
               <th class="px-3.5 py-3.5 min-w-[180px]">Alamat &amp; Catatan</th>
-              <th class="px-3 py-3.5 w-[130px] text-center">Aksi</th>
+              <th class="px-3 py-3.5 w-[110px] text-center">Aksi</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-100">
@@ -410,13 +444,13 @@ onMounted(() => {
               <!-- 1. Nama Pelanggan -->
               <td class="px-4 py-3.5 align-middle">
                 <div class="flex items-center space-x-3">
-                  <div class="w-9 h-9 rounded-xl bg-slate-100 border border-slate-200/80 flex items-center justify-center font-bold text-slate-700 text-xs shrink-0 shadow-xs">
+                  <div class="w-8 h-8 rounded-xl bg-slate-100 border border-slate-200/80 flex items-center justify-center font-bold text-slate-700 text-xs shrink-0 shadow-xs">
                     {{ getInitials(c.name) }}
                   </div>
                   <div>
                     <div class="font-bold text-slate-900 group-hover:text-indigo-600 transition">{{ c.name }}</div>
                     <div v-if="c.email" class="text-[11px] text-slate-400 font-normal truncate max-w-[200px]">{{ c.email }}</div>
-                    <div v-else class="text-[10px] text-slate-400">ID #{{ c.id }}</div>
+                    <div v-else class="text-[10px] text-slate-400 font-mono">ID #{{ c.id }}</div>
                   </div>
                 </div>
               </td>
@@ -445,19 +479,19 @@ onMounted(() => {
               <td class="px-3 py-3.5 align-middle text-center whitespace-nowrap">
                 <span
                   v-if="c.channel === 'offline'"
-                  class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200"
+                  class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200"
                 >
                   Offline
                 </span>
                 <span
                   v-else-if="c.channel === 'online'"
-                  class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200"
+                  class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200"
                 >
                   Online
                 </span>
                 <span
                   v-else
-                  class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200"
+                  class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200"
                 >
                   Omnichannel
                 </span>
@@ -500,7 +534,7 @@ onMounted(() => {
                   <button
                     type="button"
                     @click="openDetailModal(c)"
-                    class="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition cursor-pointer"
+                    class="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition cursor-pointer"
                     title="Lihat riwayat transaksi & detail pelanggan"
                   >
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -513,7 +547,7 @@ onMounted(() => {
                   <button
                     type="button"
                     @click="openEditModal(c)"
-                    class="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition cursor-pointer"
+                    class="p-1.5 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition cursor-pointer"
                     title="Ubah data pelanggan"
                   >
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -594,7 +628,7 @@ onMounted(() => {
               type="text"
               required
               placeholder="cth: Ibu Hj. Nurma atau Toko Berkah"
-              class="mt-1 block w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-600"
+              class="mt-1 block w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900"
             />
           </div>
 
@@ -607,7 +641,7 @@ onMounted(() => {
                 v-model="formData.phone"
                 type="text"
                 placeholder="cth: 08123456789"
-                class="mt-1 block w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-600 font-mono"
+                class="mt-1 block w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900 font-mono"
               />
             </div>
 
@@ -617,7 +651,7 @@ onMounted(() => {
               </label>
               <select
                 v-model="formData.channel"
-                class="mt-1 block w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-600 cursor-pointer"
+                class="mt-1 block w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900 cursor-pointer"
               >
                 <option value="offline">Offline (Toko / Grosir / Walk-in)</option>
                 <option value="online">Online (TikTok / Marketplace)</option>
@@ -634,7 +668,7 @@ onMounted(() => {
               v-model="formData.email"
               type="email"
               placeholder="cth: nurma@example.com"
-              class="mt-1 block w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-600"
+              class="mt-1 block w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900"
             />
           </div>
 
@@ -646,7 +680,7 @@ onMounted(() => {
               v-model="formData.address"
               rows="2"
               placeholder="Alamat toko, kota, ekspedisi langganan..."
-              class="mt-1 block w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-600"
+              class="mt-1 block w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900"
             ></textarea>
           </div>
 
@@ -658,7 +692,7 @@ onMounted(() => {
               v-model="formData.notes"
               type="text"
               placeholder="cth: Pelanggan grosir dropship / langganan gamis silk"
-              class="mt-1 block w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-600"
+              class="mt-1 block w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900"
             />
           </div>
 
@@ -666,14 +700,14 @@ onMounted(() => {
             <button
               type="button"
               @click="showFormModal = false"
-              class="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+              class="px-4 py-2 border border-slate-200 text-slate-700 rounded-xl text-xs font-bold hover:bg-slate-50 transition cursor-pointer"
             >
               Batal
             </button>
             <button
               type="submit"
               :disabled="isSaving"
-              class="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-xs font-bold shadow-sm shadow-indigo-500/25 transition cursor-pointer disabled:opacity-50"
+              class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-xs font-bold shadow-sm shadow-indigo-500/20 transition cursor-pointer disabled:opacity-50"
             >
               {{ isSaving ? 'Menyimpan...' : isEditing ? 'Simpan Perubahan' : 'Tambah Pelanggan' }}
             </button>
@@ -803,7 +837,7 @@ onMounted(() => {
                       <span
                         class="px-2 py-0.5 rounded-full text-[10px] font-bold capitalize"
                         :class="[
-                          ord.status === 'selesai'
+                          ord.status === 'selesai' || ord.status === 'selesai_kirim'
                             ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                             : 'bg-blue-50 text-blue-700 border border-blue-200'
                         ]"
@@ -816,7 +850,7 @@ onMounted(() => {
                   <!-- Items Table -->
                   <div class="overflow-x-auto">
                     <table class="min-w-full text-xs">
-                      <thead class="text-slate-400 font-semibold border-b border-slate-100">
+                      <thead class="text-slate-500 font-bold border-b border-slate-100">
                         <tr>
                           <th class="text-left py-1.5 w-[140px]">SKU Penjual</th>
                           <th class="text-left py-1.5">Nama Produk</th>
@@ -847,7 +881,7 @@ onMounted(() => {
           <button
             type="button"
             @click="showDetailModal = false"
-            class="px-4 py-2 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+            class="px-4 py-2 border border-slate-200 text-slate-700 rounded-xl text-xs font-bold hover:bg-slate-50 transition cursor-pointer"
           >
             Tutup
           </button>
