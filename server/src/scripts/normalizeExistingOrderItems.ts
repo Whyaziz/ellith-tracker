@@ -20,27 +20,30 @@ export async function runNormalization() {
   let onlineUnmatched = 0;
 
   for (const item of allOrderItems) {
-    if (item.seller_sku && validSkus.has(item.seller_sku)) {
-      onlineAlreadyValid++;
-      continue;
-    }
-
     const matched = findMasterProductForOrderItem(item, allProducts);
     if (matched) {
-      await db
-        .update(order_items)
-        .set({ seller_sku: matched.seller_sku })
-        .where(eq(order_items.id, item.id));
+      if (item.seller_sku === matched.seller_sku) {
+        onlineAlreadyValid++;
+      } else {
+        await db
+          .update(order_items)
+          .set({ seller_sku: matched.seller_sku })
+          .where(eq(order_items.id, item.id));
 
-      onlineUpdated++;
-      console.log(
-        `[ONLINE #${item.id}] "${item.seller_sku}" (sku: "${item.sku}") -> "${matched.seller_sku}" (${matched.name})`
-      );
+        onlineUpdated++;
+        console.log(
+          `[ONLINE #${item.id}] "${item.seller_sku}" (sku: "${item.sku}") -> "${matched.seller_sku}" (${matched.name})`
+        );
+      }
     } else {
-      onlineUnmatched++;
-      console.warn(
-        `[ONLINE UNMATCHED #${item.id}] "${item.seller_sku}" (sku: "${item.sku}", product_name: "${item.product_name}")`
-      );
+      if (item.seller_sku && validSkus.has(item.seller_sku)) {
+        onlineAlreadyValid++;
+      } else {
+        onlineUnmatched++;
+        console.warn(
+          `[ONLINE UNMATCHED #${item.id}] "${item.seller_sku}" (sku: "${item.sku}", product_name: "${item.product_name}")`
+        );
+      }
     }
   }
 
@@ -53,30 +56,33 @@ export async function runNormalization() {
   let offlineUnmatched = 0;
 
   for (const item of allOfflineItems) {
-    if (item.seller_sku && validSkus.has(item.seller_sku)) {
-      offlineAlreadyValid++;
-      continue;
-    }
-
     const matched = findMasterProductForOrderItem(
       { product_name: item.product_name, seller_sku: item.seller_sku },
       allProducts
     );
     if (matched) {
-      await db
-        .update(offline_order_items)
-        .set({ seller_sku: matched.seller_sku, product_id: matched.id })
-        .where(eq(offline_order_items.id, item.id));
+      if (item.seller_sku === matched.seller_sku && item.product_id === matched.id) {
+        offlineAlreadyValid++;
+      } else {
+        await db
+          .update(offline_order_items)
+          .set({ seller_sku: matched.seller_sku, product_id: matched.id })
+          .where(eq(offline_order_items.id, item.id));
 
-      offlineUpdated++;
-      console.log(
-        `[OFFLINE #${item.id}] "${item.seller_sku}" -> "${matched.seller_sku}" (${matched.name})`
-      );
+        offlineUpdated++;
+        console.log(
+          `[OFFLINE #${item.id}] "${item.seller_sku}" -> "${matched.seller_sku}" (${matched.name})`
+        );
+      }
     } else {
-      offlineUnmatched++;
-      console.warn(
-        `[OFFLINE UNMATCHED #${item.id}] "${item.seller_sku}" (product_name: "${item.product_name}")`
-      );
+      if (item.seller_sku && validSkus.has(item.seller_sku)) {
+        offlineAlreadyValid++;
+      } else {
+        offlineUnmatched++;
+        console.warn(
+          `[OFFLINE UNMATCHED #${item.id}] "${item.seller_sku}" (product_name: "${item.product_name}")`
+        );
+      }
     }
   }
 

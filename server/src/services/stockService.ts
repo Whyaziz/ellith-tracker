@@ -341,16 +341,15 @@ export function isSkuMatch(
   const normRaw = normalizeSkuCode(raw);
   if (normTarget && normRaw === normTarget) return true;
 
-  // 5. Token normalized match
+  // 5. Token normalized match (token harus sama persis dengan normTarget atau token panjang memuat normTarget)
   for (const token of tokens) {
     const normToken = normalizeSkuCode(token);
     if (normToken === normTarget) return true;
-    if (normTarget.length >= 5 && normToken.includes(normTarget)) return true;
-    if (normToken.length >= 5 && normTarget.includes(normToken)) return true;
+    if (normTarget.length >= 6 && normToken.includes(normTarget)) return true;
   }
 
-  // 6. Substring match jika target SKU cukup spesifik (>= 5 karakter)
-  if (targetLower.length >= 5 && lower.includes(targetLower)) return true;
+  // 6. Substring match jika target SKU cukup spesifik (>= 6 karakter)
+  if (targetLower.length >= 6 && lower.includes(targetLower)) return true;
 
   // 7. Component words set match (e.g. ATS-PNC-Army vs PNC-ATS-Army)
   const targetParts = targetLower.split(/[\-_ ]+/).map((s) => s.replace(/top/g, 'ats').replace(/set/g, 'stl')).filter(Boolean);
@@ -386,6 +385,11 @@ export function findMasterProductForOrderItem<
     if (extracted) {
       let code = extracted[0].trim();
       code = code.replace(/\s+(MUDA|ARMY|HITAM|NAVY|VIOLET|CREAM|MAROON|PINK|SAGE)$/i, '');
+      code = code.replace(/^KL2-[A-Za-z0-9]+-2C/i, (m) => m.replace(/-2C$/i, ''));
+      code = code.replace(/^JK-Biru Muda/i, 'JK-STL-Biru Laut');
+      code = code.replace(/^JK-Maroon/i, 'JK-STL-Maroon');
+      code = code.replace(/^JK-Navy/i, 'JKT-SET-Navy');
+      code = code.replace(/^JK-Violet/i, 'JK-STL-Violet');
       for (const p of productsList) {
         if (isSkuMatch(p, code)) {
           return p;
