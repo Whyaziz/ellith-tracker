@@ -86,12 +86,9 @@ export async function runNormalization() {
   console.log('=== SELESAI ===\n');
 }
 
-// Jalankan jika dipanggil langsung via CLI
-if (import.meta.url === `file:///${process.argv[1].replace(/\\/g, '/')}`) {
-  runNormalization()
-    .then(() => process.exit(0))
-    .catch((err) => {
-      console.error('Terjadi error saat normalisasi:', err);
-      process.exit(1);
-    });
-}
+runNormalization()
+  .then(() => process.exit(0))
+  .catch((err) => {
+    console.error('Terjadi error saat normalisasi:', err);
+    process.exit(1);
+  });
