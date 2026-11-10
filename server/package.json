@@ -11,7 +11,8 @@
     "db:migrate": "tsx src/db/migrate.ts",
     "seed:admin": "tsx src/scripts/seedAdmin.ts",
     "seed:simulation": "tsx src/scripts/seedSimulation.ts",
-    "db:normalize-sku": "tsx src/scripts/normalizeExistingOrderItems.ts"
+    "db:normalize-sku": "tsx src/scripts/normalizeExistingOrderItems.ts",
+    "db:backup": "tsx src/scripts/backupDatabase.ts"
   },
   "dependencies": {
     "bcryptjs": "^3.0.2",
