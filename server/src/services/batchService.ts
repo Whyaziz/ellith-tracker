@@ -5,7 +5,7 @@ import { db } from '../db/client.js';
 import { batches, orders, order_items, scan_logs, products } from '../db/schema.js';
 import { parseJtPdf, type ParsedOrder, type ParsedItem } from '../parsers/jnt.js';
 import { config } from '../config.js';
-import { isSkuMatch } from './stockService.js';
+import { isSkuMatch, findMasterProductForOrderItem } from './stockService.js';
 
 export interface DuplicateInfo {
   batch_id: number;
@@ -85,9 +85,7 @@ export async function enrichOrdersWithDuplicateCheck(
   for (const parsed of ordersList) {
     // Enrich setiap item dengan status kecocokan Seller SKU
     const enrichedItems: EnrichedParsedItem[] = parsed.items.map((it) => {
-      const matched = allMasterProducts.find((p) => {
-        return isSkuMatch(p, it.seller_sku) || isSkuMatch(p, it.sku);
-      });
+      const matched = findMasterProductForOrderItem(it, allMasterProducts);
 
       return {
         ...it,
@@ -245,6 +243,9 @@ export async function processAndSaveBatch(input: CreateBatchInput): Promise<{
     }
   }
 
+  // Ambil seluruh master produk untuk normalisasi SKU saat penyimpanan
+  const allMasterProducts = await db.select().from(products);
+
   for (const parsed of enrichedOrders) {
     if (parsed.is_duplicate) {
       if (skipDuplicates) {
@@ -285,13 +286,16 @@ export async function processAndSaveBatch(input: CreateBatchInput): Promise<{
         await db.delete(order_items).where(eq(order_items.order_id, existingOrder.id));
         if (parsed.items.length > 0) {
           await db.insert(order_items).values(
-            parsed.items.map((item) => ({
-              order_id: existingOrder.id,
-              product_name: item.product_name,
-              sku: item.sku,
-              seller_sku: item.seller_sku || item.sku,
-              qty: item.qty,
-            }))
+            parsed.items.map((item) => {
+              const matched = findMasterProductForOrderItem(item, allMasterProducts);
+              return {
+                order_id: existingOrder.id,
+                product_name: item.product_name,
+                sku: item.sku,
+                seller_sku: matched?.seller_sku ?? (item.seller_sku || item.sku),
+                qty: item.qty,
+              };
+            })
           );
         }
       }
@@ -328,13 +332,16 @@ export async function processAndSaveBatch(input: CreateBatchInput): Promise<{
 
     if (parsed.items.length > 0) {
       await db.insert(order_items).values(
-        parsed.items.map((item) => ({
-          order_id: newOrder.id,
-          product_name: item.product_name,
-          sku: item.sku,
-          seller_sku: item.seller_sku || item.sku,
-          qty: item.qty,
-        }))
+        parsed.items.map((item) => {
+          const matched = findMasterProductForOrderItem(item, allMasterProducts);
+          return {
+            order_id: newOrder.id,
+            product_name: item.product_name,
+            sku: item.sku,
+            seller_sku: matched?.seller_sku ?? (item.seller_sku || item.sku),
+            qty: item.qty,
+          };
+        })
       );
     }
   }

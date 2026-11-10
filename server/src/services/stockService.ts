@@ -300,6 +300,7 @@ export function normalizeSkuCode(str: string): string {
   if (!str) return '';
   return str
     .toLowerCase()
+    .replace(/birumuda/g, 'birulaut')
     .replace(/[^a-z0-9]/g, '')
     .replace(/top/g, 'ats')
     .replace(/set/g, 'stl')
@@ -359,6 +360,85 @@ export function isSkuMatch(
   }
 
   return false;
+}
+
+/**
+ * Mencari Master Produk terbaik untuk suatu item pesanan dengan mengevaluasi
+ * seller_sku, sku, dan product_name.
+ */
+export function findMasterProductForOrderItem<
+  T extends { id: number; name: string; seller_sku: string; sku_temp?: string | null }
+>(
+  item: { product_name?: string | null; sku?: string | null; seller_sku?: string | null },
+  productsList: T[]
+): T | null {
+  // 1. Coba pencocokan langsung menggunakan isSkuMatch terhadap seller_sku & sku
+  for (const p of productsList) {
+    if (isSkuMatch(p, item.seller_sku) || isSkuMatch(p, item.sku)) {
+      return p;
+    }
+  }
+
+  // 2. Ekstraksi kode SKU dari string gabungan (contoh: "Hitam CLN-Hitam", "Cream PNC-ATS-Cream", "BIRU JK-Biru Muda MUDA")
+  const rawList = [item.seller_sku, item.sku].filter(Boolean) as string[];
+  for (const raw of rawList) {
+    const extracted = raw.match(/(CLN|PNC|JK|JKT|KL|KL2|ROK|GMS|JH|CL)[\-_ ][A-Za-z0-9\-_ ]+/i);
+    if (extracted) {
+      let code = extracted[0].trim();
+      code = code.replace(/\s+(MUDA|ARMY|HITAM|NAVY|VIOLET|CREAM|MAROON|PINK|SAGE)$/i, '');
+      for (const p of productsList) {
+        if (isSkuMatch(p, code)) {
+          return p;
+        }
+      }
+    }
+  }
+
+  // 3. Fallback cerdas menggunakan product_name jika teks SKU hanya berisi varian/warna (misal: "Cream" atau "Hitam")
+  if (item.product_name) {
+    const pName = item.product_name.toLowerCase();
+    const COLOR_SYNONYMS: Record<string, string> = {
+      mint: 'sage',
+      'hijau mint': 'sage',
+      'rose pink': 'pink',
+      lilac: 'violet',
+      'biru muda': 'biru laut',
+      ungu: 'violet',
+      krem: 'cream',
+    };
+
+    for (const raw of rawList) {
+      const color = raw.toLowerCase().trim();
+      const mappedColor = COLOR_SYNONYMS[color] || color;
+
+      const p = productsList.find((prod) => {
+        const prodName = prod.name.toLowerCase();
+        const prodSku = prod.seller_sku.toLowerCase();
+        const hasColor =
+          prodName.includes(color) ||
+          prodName.includes(mappedColor) ||
+          prodSku.includes(color) ||
+          prodSku.includes(mappedColor) ||
+          (prod.sku_temp &&
+            (prod.sku_temp.toLowerCase().includes(color) || prod.sku_temp.toLowerCase().includes(mappedColor)));
+
+        if (hasColor) {
+          if (pName.includes('celana') && (prodName.includes('celana') || prod.seller_sku.startsWith('CLN-'))) return true;
+          if (pName.includes('atasan') && (prodName.includes('atasan') || prod.seller_sku.includes('TOP') || prod.seller_sku.includes('ATS'))) return true;
+          if (pName.includes('setelan') && (prodName.includes('setelan') || prod.seller_sku.includes('SET') || prod.seller_sku.includes('STL'))) return true;
+          if (pName.includes('gamis') && (prodName.includes('gamis') || prod.seller_sku.startsWith('GMS-'))) return true;
+          if (pName.includes('rok') && (prodName.includes('rok') || prod.seller_sku.startsWith('ROK-'))) return true;
+          if (pName.includes('2 kepala') || pName.includes('2 in 1') || pName.includes('dua kepala')) {
+            if (prodName.includes('kepala 2') || prod.seller_sku.startsWith('KL2-') || prod.seller_sku.startsWith('KL-2')) return true;
+          }
+        }
+        return false;
+      });
+      if (p) return p;
+    }
+  }
+
+  return null;
 }
 
 // ----------------- REKAPITULASI STOK PER SELLER SKU -----------------
