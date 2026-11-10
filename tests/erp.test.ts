@@ -20,6 +20,7 @@ import {
   createOfflineOrder,
   getOfflineOrders,
   updateOfflineOrder,
+  deleteOfflineOrder,
 } from '../server/src/services/offlineOrderService.js';
 import {
   createCustomer,
@@ -256,6 +257,30 @@ describe('Garment Mini-ERP Integration Tests', () => {
       const itemStockAfterCancel = stockAfterCancel.find((s) => s.seller_sku === testSellerSku);
       // Canceled order does not deduct from current available stock: 50 - 5 = 45!
       expect(itemStockAfterCancel!.available_stock).toBe(45);
+    });
+
+    it('deletes wrongly inputted offline order and removes items cascade', async () => {
+      const wrongOrder = await createOfflineOrder({
+        customer_name: 'Salah Input Pelanggan',
+        order_date: '2026-11-04',
+        userId: testUserId,
+        status: 'dikemas',
+        items: [
+          {
+            seller_sku: testSellerSku,
+            product_name: 'Item Salah Input',
+            qty: 10,
+            price: 50000,
+          },
+        ],
+      });
+
+      const delRes = await deleteOfflineOrder(wrongOrder!.id);
+      expect(delRes.success).toBe(true);
+      expect(delRes.deletedOrderNo).toBe(wrongOrder!.order_no);
+
+      const allOffline = await getOfflineOrders();
+      expect(allOffline.find((o) => o.id === wrongOrder!.id)).toBeUndefined();
     });
   });
 
