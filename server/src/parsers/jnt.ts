@@ -114,6 +114,12 @@ async function extractItemsByCoordinates(page: any): Promise<ParsedItem[]> {
   if (!headerIt) return [];
   const headerY = headerIt.transform[5];
 
+  // Temukan header 'Seller SKU' jika ada (untuk mendeteksi batas kolom Seller SKU)
+  const sellerSkuHeaderIt = rawItems.find(
+    (it: any) => it.str.includes('Seller SKU') && Math.abs(it.transform[5] - headerY) < 5
+  );
+  const sellerSkuBoundaryX = sellerSkuHeaderIt ? sellerSkuHeaderIt.transform[4] - 4 : 250;
+
   // Temukan footer: 'Qty Total:' atau 'Order ID:'
   const footerIt = rawItems.find(
     (it: any) =>
@@ -154,12 +160,14 @@ async function extractItemsByCoordinates(page: any): Promise<ParsedItem[]> {
 
   // Batas Kolom berdasarkan koordinat horizontal X:
   // Kolom Product Name : X < 125
-  // Kolom SKU          : 125 <= X < 250
+  // Kolom SKU          : 125 <= X < sellerSkuBoundaryX
+  // Kolom Seller SKU   : sellerSkuBoundaryX <= X < 250
   // Kolom Qty          : X >= 250
   const parsedItems: ParsedItem[] = [];
   let currentItem: {
     prodLines: string[];
     skuLines: string[];
+    sellerSkuLines: string[];
     qty: number;
     startY: number;
   } | null = null;
@@ -167,6 +175,7 @@ async function extractItemsByCoordinates(page: any): Promise<ParsedItem[]> {
   for (const line of lines) {
     const prodTokens: string[] = [];
     const skuTokens: string[] = [];
+    const sellerSkuTokens: string[] = [];
     let qtyVal: number | null = null;
 
     for (const it of line.items) {
@@ -176,8 +185,10 @@ async function extractItemsByCoordinates(page: any): Promise<ParsedItem[]> {
 
       if (x < 125) {
         prodTokens.push(str);
-      } else if (x < 250) {
+      } else if (x < sellerSkuBoundaryX) {
         skuTokens.push(str);
+      } else if (x < 250) {
+        sellerSkuTokens.push(str);
       } else {
         // Kolom Qty
         if (/^\d+$/.test(str)) {
@@ -190,16 +201,19 @@ async function extractItemsByCoordinates(page: any): Promise<ParsedItem[]> {
     // Terjadi jika baris memuat nilai Qty baru, atau belum ada item sama sekali
     if (qtyVal !== null || currentItem === null) {
       if (currentItem) {
+        const skuStr = currentItem.skuLines.join(' ').replace(/\s+/g, ' ').trim() || '-';
+        const sellerSkuStr = currentItem.sellerSkuLines.join(' ').replace(/\s+/g, ' ').trim() || null;
         parsedItems.push({
           product_name: joinProductNameLines(currentItem.prodLines) || 'Produk TikTok Shop',
-          sku: currentItem.skuLines.join(' ').replace(/\s+/g, ' ').trim() || '-',
-          seller_sku: null,
+          sku: skuStr,
+          seller_sku: sellerSkuStr,
           qty: currentItem.qty || 1,
         });
       }
       currentItem = {
         prodLines: prodTokens.length > 0 ? [prodTokens.join(' ')] : [],
         skuLines: skuTokens.length > 0 ? [skuTokens.join(' ')] : [],
+        sellerSkuLines: sellerSkuTokens.length > 0 ? [sellerSkuTokens.join(' ')] : [],
         qty: qtyVal || 1,
         startY: line.y,
       };
@@ -207,14 +221,17 @@ async function extractItemsByCoordinates(page: any): Promise<ParsedItem[]> {
       // Kelanjutan baris dari item yang sama (wrap teks)
       if (prodTokens.length > 0) currentItem.prodLines.push(prodTokens.join(' '));
       if (skuTokens.length > 0) currentItem.skuLines.push(skuTokens.join(' '));
+      if (sellerSkuTokens.length > 0) currentItem.sellerSkuLines.push(sellerSkuTokens.join(' '));
     }
   }
 
-  if (currentItem && (currentItem.prodLines.length > 0 || currentItem.skuLines.length > 0)) {
+  if (currentItem && (currentItem.prodLines.length > 0 || currentItem.skuLines.length > 0 || currentItem.sellerSkuLines.length > 0)) {
+    const skuStr = currentItem.skuLines.join(' ').replace(/\s+/g, ' ').trim() || '-';
+    const sellerSkuStr = currentItem.sellerSkuLines.join(' ').replace(/\s+/g, ' ').trim() || null;
     parsedItems.push({
       product_name: joinProductNameLines(currentItem.prodLines) || 'Produk TikTok Shop',
-      sku: currentItem.skuLines.join(' ').replace(/\s+/g, ' ').trim() || '-',
-      seller_sku: null,
+      sku: skuStr,
+      seller_sku: sellerSkuStr,
       qty: currentItem.qty || 1,
     });
   }
@@ -253,33 +270,67 @@ export async function parseJtPdf(input: string | Buffer): Promise<ParseResult> {
   let hasNeedsReview = false;
 
   for (const [orderId, pageObjs] of ordersMap.entries()) {
-    // Cari halaman label pengiriman utama (yang memuat barcode/nomor resi)
+    // Cari halaman label pengiriman utama (yang memuat barcode/nomor resi J&T Express atau Cargo)
     const labelPageObj =
-      pageObjs.find((po) => po.text.match(/\b(JY\d{10,12})\b/)) || pageObjs[0];
+      pageObjs.find((po) => po.text.match(/\b(JY\d{10,12}|JTC\d{9,12}|\d{12})\b/)) || pageObjs[0];
     const pageText = labelPageObj.text;
 
-    // Resi J&T (JY + 10-12 digit)
-    const resiMatch = pageText.match(/\b(JY\d{10,12})\b/);
-    const resi = resiMatch ? resiMatch[1] : `TEMP-${orderId}`;
+    // Resi J&T Express (JY + 10-12 digit atau JTC...) atau J&T Cargo (12 digit numeric)
+    const standardResiMatch = pageText.match(/\b(JY\d{10,12}|JTC\d{9,12})\b/);
+    const cargoResiMatch = pageText.match(/\b(\d{12})\b/);
 
-    // Service (NDD, EZ, ECO)
-    const serviceMatch = pageText.match(/\b(NDD|EZ|ECO)\b/);
-    const service = serviceMatch ? serviceMatch[1] : 'EZ';
+    let resi = `TEMP-${orderId}`;
+    let isCargo = false;
+    if (standardResiMatch) {
+      resi = standardResiMatch[1];
+    } else if (cargoResiMatch) {
+      resi = cargoResiMatch[1];
+      isCargo = true;
+    }
+
+    if (!isCargo && /\b(Standard|Cargo)\b/i.test(pageText) && !/\b(EZ|NDD|ECO)\b/.test(pageText)) {
+      isCargo = true;
+    }
+
+    // Courier
+    const courier = isCargo ? 'J&T Cargo' : 'J&T Express';
+
+    // Service (NDD, EZ, ECO, Standard, Cargo)
+    const serviceMatch = pageText.match(/\b(NDD|EZ|ECO|Standard|Cargo)\b/i);
+    let service = isCargo ? 'Standard' : 'EZ';
+    if (serviceMatch) {
+      service = serviceMatch[1];
+    }
 
     // Deteksi COD
-    const isCod = /\bCOD\b/.test(pageText);
+    let isCod = false;
+    if (isCargo) {
+      isCod = /\bCOD\s*:\s*(?:Rp\s*)?[1-9]/i.test(pageText);
+    } else {
+      isCod = /\bCOD\b/.test(pageText);
+    }
 
     // Berat dalam KG
     const weightMatch = pageText.match(/(\d+(?:\.\d+)?)\s*KG/i);
     const weightKg = weightMatch ? parseFloat(weightMatch[1]) : 0;
 
     // Tanggal kirim
-    const dateMatch = pageText.match(/\b(\d{2}-\d{2}-\d{4})\b/);
-    const shipDate = dateMatch ? dateMatch[1] : null;
+    let shipDate: string | null = null;
+    const dmyMatch = pageText.match(/\b(\d{2}-\d{2}-\d{4})\b/);
+    const slashMatch = pageText.match(/\b(\d{2})\/(\d{2})\/(\d{4})\b/);
+    const ymdMatch = pageText.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
 
-    // Kode sortir (cth: 470-2KLP03-24C)
-    const sortingMatch = pageText.match(/\b\d{3}-[A-Z0-9]+-[A-Z0-9]+\b/);
-    const sortingCode = sortingMatch ? sortingMatch[0] : null;
+    if (dmyMatch) {
+      shipDate = dmyMatch[1];
+    } else if (slashMatch) {
+      shipDate = `${slashMatch[1]}-${slashMatch[2]}-${slashMatch[3]}`;
+    } else if (ymdMatch) {
+      shipDate = `${ymdMatch[3]}-${ymdMatch[2]}-${ymdMatch[1]}`;
+    }
+
+    // Kode sortir (cth: 470-2KLP03-24C atau BJA-BJA002A-XX)
+    const sortingMatch = pageText.match(/\b([A-Z0-9]{3}-[A-Z0-9]+-[A-Z0-9]+)\b/);
+    const sortingCode = sortingMatch ? sortingMatch[1] : null;
 
     // Ekstraksi Penerima & Alamat
     const lines = pageText
@@ -291,43 +342,91 @@ export async function parseJtPdf(input: string | Buffer): Promise<ParseResult> {
     let recipientPhone: string | null = null;
 
     const phoneMatches = pageText.match(/\(\+62\)[0-9*]+/g) || [];
-    if (phoneMatches.length >= 2) {
+    // Abaikan nomor telepon pengirim toko Ellith (81215564477)
+    const nonSenderPhones = phoneMatches.filter((p) => !p.includes('81215564477'));
+    if (nonSenderPhones.length > 0) {
+      recipientPhone = nonSenderPhones[0];
+    } else if (phoneMatches.length > 1) {
       recipientPhone = phoneMatches[1];
     } else if (phoneMatches.length === 1) {
       recipientPhone = phoneMatches[0];
     }
 
-    const senderPhoneIdx = lines.findIndex(
-      (l) => l.includes('(+62)81215564477') || (l.includes('(+62)') && l.includes('812'))
-    );
+    let recipientAddress = 'Alamat pada label pengiriman';
 
-    let streetLines: string[] = [];
-    if (senderPhoneIdx !== -1 && senderPhoneIdx + 1 < lines.length) {
-      recipientName = lines[senderPhoneIdx + 1]
-        .replace(/\t/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-
-      const recPhoneIdx = recipientPhone
-        ? lines.findIndex((l, idx) => idx > senderPhoneIdx && l.includes(recipientPhone!))
-        : -1;
-
-      if (recPhoneIdx !== -1) {
-        streetLines = lines.slice(senderPhoneIdx + 2, recPhoneIdx);
+    if (isCargo) {
+      // CARGO:
+      const penerimaIdx = lines.findIndex((l) => /^Penerima\b/i.test(l));
+      if (penerimaIdx !== -1) {
+        if (
+          penerimaIdx > 0 &&
+          !lines[penerimaIdx - 1].includes('(+62)') &&
+          !/^(Standard|\d+)$/i.test(lines[penerimaIdx - 1])
+        ) {
+          recipientName = lines[penerimaIdx - 1].replace(/\t/g, ' ').replace(/\s+/g, ' ').trim();
+        } else if (
+          penerimaIdx + 1 < lines.length &&
+          !lines[penerimaIdx + 1].includes('Ellith') &&
+          !lines[penerimaIdx + 1].includes('Daerah Istimewa')
+        ) {
+          recipientName = lines[penerimaIdx + 1].replace(/\t/g, ' ').replace(/\s+/g, ' ').trim();
+        }
       }
-    }
 
-    // Kota tujuan di bawah deretan nomor resi
-    const resiLastIdx = lines.findLastIndex((l) => l.includes(resi));
-    let cityLine = '';
-    if (resiLastIdx !== -1 && resiLastIdx + 1 < lines.length) {
-      cityLine = lines[resiLastIdx + 1];
-    }
+      // Alamat Cargo di antara Print Time / Weight dan TT Order ID
+      let streetLines: string[] = [];
+      const printTimeIdx = lines.findLastIndex((l) => /Print Time|Weight/i.test(l));
+      const ttOrderIdx = lines.findIndex((l) => /TT Order ID|Order ID/i.test(l));
+      if (printTimeIdx !== -1 && ttOrderIdx !== -1 && ttOrderIdx > printTimeIdx) {
+        streetLines = lines.slice(printTimeIdx + 1, ttOrderIdx).filter((l) => !/Print Time|Weight/i.test(l));
+      }
+      let rawAddr = '';
+      for (const line of streetLines) {
+        const l = line.trim();
+        if (!l) continue;
+        if (!rawAddr) {
+          rawAddr = l;
+        } else if (/[a-zA-Z]$/.test(rawAddr) && /^[a-z],/.test(l)) {
+          rawAddr += l;
+        } else {
+          rawAddr += ' ' + l;
+        }
+      }
+      recipientAddress = cleanAddress(rawAddr) || 'Alamat pada label pengiriman';
+    } else {
+      // STANDARD J&T:
+      const senderPhoneIdx = lines.findIndex(
+        (l) => l.includes('(+62)81215564477') || (l.includes('(+62)') && l.includes('812'))
+      );
 
-    // Gabungkan baris alamat dengan SPASI (bukan koma!)
-    const streetCombined = streetLines.join(' ');
-    const fullRawAddress = cityLine ? `${streetCombined}, ${cityLine}` : streetCombined;
-    const recipientAddress = cleanAddress(fullRawAddress) || 'Alamat pada label pengiriman';
+      let streetLines: string[] = [];
+      if (senderPhoneIdx !== -1 && senderPhoneIdx + 1 < lines.length) {
+        recipientName = lines[senderPhoneIdx + 1]
+          .replace(/\t/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+
+        const recPhoneIdx = recipientPhone
+          ? lines.findIndex((l, idx) => idx > senderPhoneIdx && l.includes(recipientPhone!))
+          : -1;
+
+        if (recPhoneIdx !== -1) {
+          streetLines = lines.slice(senderPhoneIdx + 2, recPhoneIdx);
+        }
+      }
+
+      // Kota tujuan di bawah deretan nomor resi
+      const resiLastIdx = lines.findLastIndex((l) => l.includes(resi));
+      let cityLine = '';
+      if (resiLastIdx !== -1 && resiLastIdx + 1 < lines.length) {
+        cityLine = lines[resiLastIdx + 1];
+      }
+
+      // Gabungkan baris alamat dengan SPASI (bukan koma!)
+      const streetCombined = streetLines.join(' ');
+      const fullRawAddress = cityLine ? `${streetCombined}, ${cityLine}` : streetCombined;
+      recipientAddress = cleanAddress(fullRawAddress) || 'Alamat pada label pengiriman';
+    }
 
     // Ekstraksi item produk menggunakan koordinat X & baris tabel
     const items: ParsedItem[] = [];
@@ -363,7 +462,7 @@ export async function parseJtPdf(input: string | Buffer): Promise<ParseResult> {
     orders.push({
       order_id: orderId,
       resi,
-      courier: 'J&T Express',
+      courier,
       service,
       is_cod: isCod,
       weight_kg: weightKg,

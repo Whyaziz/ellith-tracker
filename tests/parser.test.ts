@@ -87,6 +87,39 @@ describe('J&T Parser (server/src/parsers/jnt.ts)', () => {
     }
   });
 
+  it('correctly parses TikTok Shop Cargo PDF (docs/11.05 (1)_removed.pdf)', async () => {
+    const pdfPath = path.resolve(__dirname, '../docs/11.05 (1)_removed.pdf');
+    const result = await parseJtPdf(pdfPath);
+
+    expect(result.totalOrders).toBe(1);
+    expect(result.totalPages).toBe(1);
+
+    const order = result.orders[0];
+    expect(order).toBeDefined();
+    expect(order.order_id).toBe('586939109717608133');
+    expect(order.resi).toBe('570688561225');
+    expect(order.courier).toBe('J&T Cargo');
+    expect(order.service).toBe('Standard');
+    expect(order.is_cod).toBe(false);
+    expect(order.weight_kg).toBe(3);
+    expect(order.ship_date).toBe('03-11-2026');
+    expect(order.sorting_code).toBe('BJA-BJA002A-XX');
+    expect(order.recipient_name).toBe('S**n');
+    expect(order.recipient_name).not.toContain('Ellith');
+    expect(order.recipient_phone).toBe('(+62)81*******41');
+    expect(order.recipient_phone).not.toContain('81215564477');
+    expect(order.recipient_address).toContain('Ciamis');
+    expect(order.recipient_address).toContain('Pamarican');
+    expect(order.recipient_address).not.toContain('Print Time');
+    expect(order.qty_total).toBe(10);
+    expect(order.needs_review).toBe(false);
+
+    expect(order.items.length).toBe(1);
+    expect(order.items[0].sku).toBe('Navy');
+    expect(order.items[0].seller_sku).toBe('CLN-Navy');
+    expect(order.items[0].qty).toBe(10);
+  });
+
   it('validates joinProductNameLines hyphen rules', () => {
     // Ends with letter followed by '-' without space before it -> joins without space
     expect(joinProductNameLines(['REMBES - TEKNOLOGI NON-', 'JAHITAN DENGAN RESLETING'])).toBe(
