@@ -1,5 +1,5 @@
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
-import { db } from './client.js';
+import { db, sqlite } from './client.js';
 import { config } from '../config.js';
 import { product_categories } from './schema.js';
 import fs from 'node:fs';
@@ -37,6 +37,28 @@ export function runMigrations() {
     }
   } catch (err) {
     console.warn('[db:migrate] Note on seeding categories:', err);
+  }
+
+  // Ensure label_color column on products
+  try {
+    const productCols = sqlite.prepare("PRAGMA table_info(products)").all() as Array<{ name: string }>;
+    if (productCols.length > 0 && !productCols.some((c) => c.name === 'label_color')) {
+      console.log('[db:migrate] Adding column label_color to products table...');
+      sqlite.prepare("ALTER TABLE products ADD COLUMN label_color text NOT NULL DEFAULT '#4f46e5'").run();
+    }
+  } catch (err) {
+    console.warn('[db:migrate] Note on products label_color column:', err);
+  }
+
+  // Ensure photo_url column on customers
+  try {
+    const customerCols = sqlite.prepare("PRAGMA table_info(customers)").all() as Array<{ name: string }>;
+    if (customerCols.length > 0 && !customerCols.some((c) => c.name === 'photo_url')) {
+      console.log('[db:migrate] Adding column photo_url to customers table...');
+      sqlite.prepare("ALTER TABLE customers ADD COLUMN photo_url text").run();
+    }
+  } catch (err) {
+    console.warn('[db:migrate] Note on customers photo_url column:', err);
   }
 }
 

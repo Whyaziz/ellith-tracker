@@ -215,7 +215,7 @@ export async function getDashboardData(
   const allCategories = await db.select().from(product_categories);
   const categoryStockMap = new Map<
     string,
-    { total_in: number; available_stock: number; total_sold: number; sku_count: number }
+    { total_in: number; available_stock: number; total_sold: number; sku_count: number; color: string }
   >();
 
   for (const cat of allCategories) {
@@ -224,6 +224,7 @@ export async function getDashboardData(
       available_stock: 0,
       total_sold: 0,
       sku_count: 0,
+      color: '#4f46e5',
     });
   }
   categoryStockMap.set('Lainnya', {
@@ -231,6 +232,7 @@ export async function getDashboardData(
     available_stock: 0,
     total_sold: 0,
     sku_count: 0,
+    color: '#64748b',
   });
 
   for (const s of stockOverview) {
@@ -240,11 +242,16 @@ export async function getDashboardData(
       available_stock: 0,
       total_sold: 0,
       sku_count: 0,
+      color: s.label_color || '#4f46e5',
     };
     entry.total_in += s.total_in;
     entry.available_stock += Math.max(0, s.available_stock);
     entry.total_sold += s.total_sold;
     entry.sku_count += 1;
+    // Gunakan warna produk dari master produk untuk kategori
+    if (s.label_color && s.label_color !== '#4f46e5') {
+      entry.color = s.label_color;
+    }
     categoryStockMap.set(catName, entry);
   }
 
@@ -257,14 +264,17 @@ export async function getDashboardData(
 
   // --- LIST BARANG PALING LAKU (TOP SELLING SKUS) ---
   const topSellingProducts = [...stockOverview]
-    .sort((a, b) => b.total_sold - a.total_sold)
-    .slice(0, 8)
+    .sort((a, b) => (b.online_sold ?? b.total_sold) - (a.online_sold ?? a.total_sold))
+    .slice(0, 10)
     .map((s) => ({
       product_id: s.product_id,
       seller_sku: s.seller_sku,
       product_name: s.product_name,
       category_name: s.category_name,
       image_url: s.image_url,
+      label_color: s.label_color,
+      online_sold: s.online_sold ?? 0,
+      offline_sold: s.offline_sold ?? 0,
       total_sold: s.total_sold,
       available_stock: s.available_stock,
       health_status: s.health_status,

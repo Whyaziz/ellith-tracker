@@ -34,10 +34,11 @@ const pdfDir = path.join(dataDir, 'pdf');
 const backupDir = path.join(dataDir, 'backup');
 const uploadsDir = path.join(dataDir, 'uploads');
 const productsDir = path.join(uploadsDir, 'products');
+const customersDir = path.join(uploadsDir, 'customers');
 const dbPath = path.join(dataDir, 'app.db');
 
 // Ensure required runtime directories exist
-for (const dir of [dataDir, logsDir, pdfDir, backupDir, uploadsDir, productsDir]) {
+for (const dir of [dataDir, logsDir, pdfDir, backupDir, uploadsDir, productsDir, customersDir]) {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
@@ -55,6 +56,7 @@ export const config = {
     backupDir,
     uploadsDir,
     productsDir,
+    customersDir,
     dbPath,
     migrationsDir: path.resolve(__dirname, '../drizzle'),
     publicDir: path.resolve(__dirname, '../public'),

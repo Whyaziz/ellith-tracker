@@ -15,6 +15,7 @@ export interface CreateCustomerInput {
   address?: string | null;
   channel?: 'offline' | 'online' | 'omnichannel';
   notes?: string | null;
+  photo_url?: string | null;
 }
 
 export interface UpdateCustomerInput {
@@ -24,6 +25,7 @@ export interface UpdateCustomerInput {
   address?: string | null;
   channel?: 'offline' | 'online' | 'omnichannel';
   notes?: string | null;
+  photo_url?: string | null;
 }
 
 export interface CustomerWithSummary extends Customer {
@@ -46,6 +48,7 @@ export async function createCustomer(input: CreateCustomerInput): Promise<Custom
       email: input.email?.trim() || null,
       address: input.address?.trim() || null,
       channel: input.channel || 'offline',
+      photo_url: input.photo_url || null,
       notes: input.notes?.trim() || null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -201,6 +204,7 @@ export async function updateCustomer(id: number, input: UpdateCustomerInput) {
   if (input.email !== undefined) updates.email = input.email?.trim() || null;
   if (input.address !== undefined) updates.address = input.address?.trim() || null;
   if (input.channel !== undefined) updates.channel = input.channel;
+  if (input.photo_url !== undefined) updates.photo_url = input.photo_url || null;
   if (input.notes !== undefined) updates.notes = input.notes?.trim() || null;
 
   await db.update(customers).set(updates).where(eq(customers.id, id));

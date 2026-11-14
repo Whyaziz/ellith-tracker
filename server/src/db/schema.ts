@@ -139,6 +139,7 @@ export const products = sqliteTable(
       onDelete: 'set null',
     }),
     image_url: text('image_url'),
+    label_color: text('label_color').notNull().default('#4f46e5'),
     min_stock: integer('min_stock', { mode: 'number' }).notNull().default(10),
     max_stock: integer('max_stock', { mode: 'number' }).notNull().default(100),
     created_at: text('created_at')
@@ -216,6 +217,7 @@ export const customers = sqliteTable(
     channel: text('channel', { enum: ['offline', 'online', 'omnichannel'] })
       .notNull()
       .default('offline'),
+    photo_url: text('photo_url'),
     notes: text('notes'),
     created_at: text('created_at')
       .notNull()

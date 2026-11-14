@@ -3,6 +3,7 @@ import { ref, computed, onMounted, watch } from 'vue';
 import { api, ApiError } from '../api/client';
 import DateRangePicker from '../components/DateRangePicker.vue';
 import Pagination from '../components/Pagination.vue';
+import SearchSelect from '../components/SearchSelect.vue';
 
 interface UnifiedOrderItem {
   seller_sku: string;
@@ -296,6 +297,13 @@ function onCustomerSelected(customerId: number | '') {
     if (cust.phone) offlineForm.value.customer_phone = cust.phone;
   }
 }
+
+const productSelectOptions = computed(() => {
+  return availableProducts.value.map((p) => ({
+    value: p.seller_sku,
+    label: p.name,
+  }));
+});
 
 function onProductSelect(idx: number) {
   const item = offlineForm.value.items[idx];
@@ -1270,24 +1278,23 @@ onMounted(() => {
               </button>
             </div>
 
-            <div class="space-y-2 max-h-52 overflow-y-auto pr-1">
+            <div class="space-y-2 max-h-80 overflow-y-auto pr-1 pb-16">
               <div
                 v-for="(row, idx) in offlineForm.items"
                 :key="idx"
                 class="flex items-center space-x-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200 text-xs"
               >
-                <!-- SKU Dropdown -->
-                <select
-                  v-model="row.seller_sku"
-                  @change="onProductSelect(idx)"
-                  required
-                  class="flex-1 px-3 py-2 bg-white border border-slate-300 rounded-lg font-mono font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
-                >
-                  <option value="" disabled>-- Pilih Seller SKU --</option>
-                  <option v-for="p in availableProducts" :key="p.id" :value="p.seller_sku">
-                    {{ p.seller_sku }} - {{ p.name }}
-                  </option>
-                </select>
+                <!-- SKU Search Dropdown -->
+                <div class="flex-1 min-w-[200px]">
+                  <SearchSelect
+                    v-model="row.seller_sku"
+                    :options="productSelectOptions"
+                    placeholder="-- Pilih Seller SKU --"
+                    searchPlaceholder="Cari Seller SKU atau nama..."
+                    @change="onProductSelect(idx)"
+                    required
+                  />
+                </div>
 
                 <!-- Qty -->
                 <div class="w-20">

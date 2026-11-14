@@ -15,6 +15,7 @@ interface Product {
   name: string;
   category_id: number;
   image_url: string | null;
+  label_color?: string;
   min_stock: number;
   max_stock: number;
   created_at: string;
@@ -22,6 +23,21 @@ interface Product {
 }
 
 const activeTab = ref<'products' | 'categories'>('products');
+
+const presetColors = [
+  '#4f46e5', // Indigo
+  '#3b82f6', // Blue
+  '#06b6d4', // Cyan
+  '#10b981', // Emerald
+  '#14b8a6', // Teal
+  '#f59e0b', // Amber
+  '#f97316', // Orange
+  '#ef4444', // Red
+  '#8b5cf6', // Purple
+  '#ec4899', // Pink
+  '#64748b', // Slate
+  '#0f172a', // Dark
+];
 
 // Products State
 const products = ref<Product[]>([]);
@@ -39,6 +55,7 @@ const productForm = ref({
   name: '',
   category_id: 0,
   image_url: '',
+  label_color: '#4f46e5',
   min_stock: 5,
   max_stock: 100,
 });
@@ -196,6 +213,7 @@ function openCreateProduct() {
     name: '',
     category_id: categories.value[0]?.id || 0,
     image_url: '',
+    label_color: '#4f46e5',
     min_stock: 5,
     max_stock: 100,
   };
@@ -211,6 +229,7 @@ function openEditProduct(p: Product) {
     name: p.name,
     category_id: p.category_id,
     image_url: p.image_url || '',
+    label_color: p.label_color || '#4f46e5',
     min_stock: p.min_stock,
     max_stock: p.max_stock,
   };
@@ -236,6 +255,7 @@ async function saveProduct() {
     name: productForm.value.name.trim(),
     category_id: Number(productForm.value.category_id),
     image_url: productForm.value.image_url.trim() || null,
+    label_color: productForm.value.label_color?.trim() || '#4f46e5',
     min_stock: Number(productForm.value.min_stock) || 0,
     max_stock: Number(productForm.value.max_stock) || 0,
   };
@@ -535,6 +555,7 @@ onMounted(() => {
                 <tr>
                   <th class="px-4 py-2.5">Produk</th>
                   <th class="px-4 py-2.5">Seller SKU</th>
+                  <th class="px-4 py-2.5 text-center">Warna Label</th>
                   <th class="px-4 py-2.5 text-center">Ambang Stok</th>
                   <th class="px-4 py-2.5 text-right">Aksi</th>
                 </tr>
@@ -565,6 +586,17 @@ onMounted(() => {
                   <!-- Seller SKU -->
                   <td class="px-4 py-3 align-middle font-mono font-bold text-slate-900 whitespace-nowrap">
                     {{ p.seller_sku }}
+                  </td>
+
+                  <!-- Warna Label -->
+                  <td class="px-4 py-3 align-middle text-center whitespace-nowrap">
+                    <div class="inline-flex items-center space-x-1.5 px-2 py-0.5 rounded-md bg-slate-50 border border-slate-200 text-[11px] font-mono font-bold text-slate-700">
+                      <span
+                        class="w-3 h-3 rounded-full border border-black/10 shrink-0 shadow-2xs"
+                        :style="{ backgroundColor: p.label_color || '#4f46e5' }"
+                      ></span>
+                      <span class="uppercase">{{ p.label_color || '#4f46e5' }}</span>
+                    </div>
                   </td>
 
                   <!-- Batas Stok -->
@@ -776,6 +808,48 @@ onMounted(() => {
                   </button>
                 </div>
                 <p class="text-[10px] text-slate-400">Format JPG, PNG, atau WEBP maks 5MB.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Label Color (Color Picker) -->
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-700">
+              Warna Label (Chart & Tampilan Grafik)
+            </label>
+            <p class="text-[11px] text-slate-400 mb-2">
+              Pilih warna khas produk ini untuk ditampilkan pada chart Distribusi Stok dan grafik analitik.
+            </p>
+            <div class="flex flex-wrap items-center gap-3 bg-slate-50 p-3 rounded-2xl border border-slate-200">
+              <!-- Color input & Hex text -->
+              <div class="flex items-center space-x-2">
+                <input
+                  v-model="productForm.label_color"
+                  type="color"
+                  class="w-9 h-9 p-0.5 rounded-xl border border-slate-300 bg-white cursor-pointer shadow-2xs shrink-0"
+                />
+                <input
+                  v-model="productForm.label_color"
+                  type="text"
+                  placeholder="#4f46e5"
+                  maxlength="7"
+                  class="w-24 px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono font-bold uppercase text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-600"
+                />
+              </div>
+
+              <!-- Quick Preset Swatches -->
+              <div class="flex flex-wrap items-center gap-1.5 border-t sm:border-t-0 sm:border-l border-slate-200 pt-2 sm:pt-0 sm:pl-3">
+                <span class="text-[10px] text-slate-400 font-semibold mr-1">Preset:</span>
+                <button
+                  v-for="color in presetColors"
+                  :key="color"
+                  type="button"
+                  @click="productForm.label_color = color"
+                  class="w-5 h-5 rounded-full border border-black/10 transition-transform hover:scale-125 cursor-pointer shadow-2xs"
+                  :class="{ 'ring-2 ring-indigo-600 ring-offset-1 scale-110': productForm.label_color === color }"
+                  :style="{ backgroundColor: color }"
+                  :title="color"
+                />
               </div>
             </div>
           </div>

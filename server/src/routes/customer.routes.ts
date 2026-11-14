@@ -1,4 +1,8 @@
 import { Router } from 'express';
+import multer from 'multer';
+import path from 'node:path';
+import fs from 'node:fs';
+import { config } from '../config.js';
 import { requireAuth } from '../middleware/auth.js';
 import {
   createCustomer,
@@ -9,6 +13,47 @@ import {
 } from '../services/customerService.js';
 
 export const customerRouter = Router();
+
+// Multer storage untuk upload foto customer
+const storage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    if (!fs.existsSync(config.paths.customersDir)) {
+      fs.mkdirSync(config.paths.customersDir, { recursive: true });
+    }
+    cb(null, config.paths.customersDir);
+  },
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    const unique = `cust-${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
+    cb(null, unique);
+  },
+});
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
+  fileFilter: (_req, file, cb) => {
+    if (!file.mimetype.startsWith('image/')) {
+      cb(new Error('Hanya berkas gambar (JPG, PNG, WEBP) yang diizinkan'));
+      return;
+    }
+    cb(null, true);
+  },
+});
+
+// POST /api/customers/upload-photo - Upload foto profil pelanggan
+customerRouter.post('/upload-photo', requireAuth, upload.single('photo'), (req, res, next) => {
+  try {
+    if (!req.file) {
+      res.status(400).json({ error: 'Tidak ada berkas gambar yang diunggah' });
+      return;
+    }
+    const photoUrl = `/uploads/customers/${req.file.filename}`;
+    res.json({ message: 'Foto profil berhasil diunggah', photoUrl });
+  } catch (err) {
+    next(err);
+  }
+});
 
 // GET /api/customers - Daftar pelanggan dengan agregasi total pembelian
 customerRouter.get('/', requireAuth, async (req, res, next) => {

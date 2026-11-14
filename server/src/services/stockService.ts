@@ -44,6 +44,7 @@ export interface SkuStockSummary {
   product_name: string;
   category_name: string | null;
   image_url: string | null;
+  label_color: string;
   min_stock: number;
   max_stock: number;
   total_in: number;
@@ -52,6 +53,8 @@ export interface SkuStockSummary {
   packed_qty: number; // Siap kirim (online + offline)
   shipped_qty: number; // Selesai kirim / selesai (online + offline)
   canceled_qty: number; // Dibatalkan (kembali ke stok)
+  online_sold: number; // Terjual khusus online
+  offline_sold: number; // Terjual khusus offline / CRM
   total_sold: number; // Total aktif keluar
   available_stock: number; // Sisa stok tersedia untuk dijual
   physical_stock: number; // Stok fisik riil di rak gudang
@@ -458,6 +461,7 @@ export async function getStockOverview(filters?: { search?: string; categoryId?:
       category_id: products.category_id,
       category_name: product_categories.name,
       image_url: products.image_url,
+      label_color: products.label_color,
       min_stock: products.min_stock,
       max_stock: products.max_stock,
     })
@@ -550,6 +554,9 @@ export async function getStockOverview(filters?: { search?: string; categoryId?:
     const shipped_qty = onlineShipped + offlineShipped;
     const canceled_qty = onlineCanceled + offlineCanceled;
 
+    const online_sold = onlineUnpacked + onlinePacked + onlineShipped;
+    const offline_sold = offlineUnpacked + offlinePacked + offlineShipped;
+
     // Total terjual aktif (belum dikemas + siap kirim + selesai kirim)
     const total_sold = unpacked_qty + packed_qty + shipped_qty;
 
@@ -580,6 +587,7 @@ export async function getStockOverview(filters?: { search?: string; categoryId?:
       product_name: p.name,
       category_name: p.category_name,
       image_url: p.image_url,
+      label_color: p.label_color || '#4f46e5',
       min_stock: p.min_stock,
       max_stock: p.max_stock,
       total_in,
@@ -588,6 +596,8 @@ export async function getStockOverview(filters?: { search?: string; categoryId?:
       packed_qty,
       shipped_qty,
       canceled_qty,
+      online_sold,
+      offline_sold,
       total_sold,
       available_stock,
       physical_stock,

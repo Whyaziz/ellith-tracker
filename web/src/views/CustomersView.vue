@@ -11,6 +11,7 @@ interface CustomerSummary {
   address: string | null;
   channel: 'offline' | 'online' | 'omnichannel';
   notes: string | null;
+  photo_url?: string | null;
   created_at: string;
   updated_at: string;
   total_items_purchased: number;
@@ -64,8 +65,13 @@ const formData = ref({
   email: '',
   address: '',
   channel: 'offline' as 'offline' | 'online' | 'omnichannel',
+  photo_url: '',
   notes: '',
 });
+
+// Photo Upload State
+const isUploadingPhoto = ref(false);
+const photoFileInput = ref<HTMLInputElement | null>(null);
 
 // Modal Detail Pelanggan
 const showDetailModal = ref(false);
@@ -123,6 +129,34 @@ const avgQtyPerCustomer = computed(() => {
   return Math.round(totalPurchasedQty.value / totalCustomersCount.value);
 });
 
+async function handlePhotoFileChange(e: Event) {
+  const target = e.target as HTMLInputElement;
+  if (!target.files || target.files.length === 0) return;
+  const file = target.files[0];
+
+  if (file.size > 5 * 1024 * 1024) {
+    alert('Ukuran berkas foto maksimal 5MB');
+    return;
+  }
+
+  isUploadingPhoto.value = true;
+  const fd = new FormData();
+  fd.append('photo', file);
+
+  try {
+    const res = await api.post<{ message: string; photoUrl: string }>('/api/customers/upload-photo', fd);
+    formData.value.photo_url = res.photoUrl;
+  } catch (err: unknown) {
+    if (err instanceof ApiError) {
+      alert(`Gagal mengunggah foto profil: ${err.message}`);
+    } else {
+      alert('Gagal mengunggah foto profil');
+    }
+  } finally {
+    isUploadingPhoto.value = false;
+  }
+}
+
 function openCreateModal() {
   isEditing.value = false;
   editingCustomerId.value = null;
@@ -132,6 +166,7 @@ function openCreateModal() {
     email: '',
     address: '',
     channel: 'offline',
+    photo_url: '',
     notes: '',
   };
   formError.value = '';
@@ -147,6 +182,7 @@ function openEditModal(c: CustomerSummary) {
     email: c.email || '',
     address: c.address || '',
     channel: c.channel,
+    photo_url: c.photo_url || '',
     notes: c.notes || '',
   };
   formError.value = '';
@@ -444,7 +480,16 @@ onMounted(() => {
               <!-- 1. Nama Pelanggan -->
               <td class="px-4 py-3.5 align-middle">
                 <div class="flex items-center space-x-3">
-                  <div class="w-8 h-8 rounded-xl bg-slate-100 border border-slate-200/80 flex items-center justify-center font-bold text-slate-700 text-xs shrink-0 shadow-xs">
+                  <img
+                    v-if="c.photo_url"
+                    :src="c.photo_url"
+                    :alt="c.name"
+                    class="w-8 h-8 rounded-xl object-cover border border-slate-200/80 shrink-0 shadow-xs"
+                  />
+                  <div
+                    v-else
+                    class="w-8 h-8 rounded-xl bg-slate-100 border border-slate-200/80 flex items-center justify-center font-bold text-slate-700 text-xs shrink-0 shadow-xs"
+                  >
                     {{ getInitials(c.name) }}
                   </div>
                   <div>
@@ -619,6 +664,64 @@ onMounted(() => {
         </div>
 
         <form @submit.prevent="saveCustomer" class="space-y-3.5">
+          <!-- Foto Profil (Opsional) -->
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+              Foto Profil Pelanggan (Opsional)
+            </label>
+            <div class="flex items-center space-x-3.5">
+              <div class="relative w-14 h-14 rounded-2xl overflow-hidden bg-slate-100 border border-slate-200/80 shrink-0 flex items-center justify-center shadow-xs">
+                <img
+                  v-if="formData.photo_url"
+                  :src="formData.photo_url"
+                  alt="Avatar"
+                  class="w-full h-full object-cover"
+                />
+                <span v-else class="text-xs font-bold text-slate-400 font-mono">
+                  {{ formData.name ? getInitials(formData.name) : 'CRM' }}
+                </span>
+                <div
+                  v-if="isUploadingPhoto"
+                  class="absolute inset-0 bg-slate-900/50 flex items-center justify-center"
+                >
+                  <svg class="animate-spin w-5 h-5 text-white" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                  </svg>
+                </div>
+              </div>
+
+              <div class="space-y-1">
+                <div class="flex items-center space-x-2">
+                  <input
+                    ref="photoFileInput"
+                    type="file"
+                    accept="image/*"
+                    class="hidden"
+                    @change="handlePhotoFileChange"
+                  />
+                  <button
+                    type="button"
+                    :disabled="isUploadingPhoto"
+                    @click="photoFileInput?.click()"
+                    class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 rounded-lg text-xs font-semibold border border-slate-200/80 transition cursor-pointer disabled:opacity-50"
+                  >
+                    {{ formData.photo_url ? 'Ganti Foto' : 'Unggah Foto' }}
+                  </button>
+                  <button
+                    v-if="formData.photo_url"
+                    type="button"
+                    @click="formData.photo_url = ''"
+                    class="px-2.5 py-1.5 text-rose-600 hover:bg-rose-50 rounded-lg text-xs font-semibold transition cursor-pointer"
+                  >
+                    Hapus
+                  </button>
+                </div>
+                <p class="text-[11px] text-slate-400">Format JPG, PNG, atau WebP (maks. 5MB)</p>
+              </div>
+            </div>
+          </div>
+
           <div>
             <label class="block text-xs font-bold uppercase tracking-wider text-slate-700">
               Nama Pelanggan <span class="text-rose-600">*</span>
@@ -727,7 +830,16 @@ onMounted(() => {
         <!-- Header -->
         <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
           <div class="flex items-center space-x-3">
-            <div class="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-700 flex items-center justify-center font-black text-sm">
+            <img
+              v-if="selectedCustomer?.photo_url"
+              :src="selectedCustomer.photo_url"
+              :alt="selectedCustomer.name"
+              class="w-12 h-12 rounded-2xl object-cover border border-slate-200/80 shrink-0 shadow-xs"
+            />
+            <div
+              v-else
+              class="w-12 h-12 rounded-2xl bg-indigo-50 border border-indigo-200 text-indigo-700 flex items-center justify-center font-black text-sm shrink-0"
+            >
               {{ selectedCustomer ? getInitials(selectedCustomer.name) : 'PL' }}
             </div>
             <div>

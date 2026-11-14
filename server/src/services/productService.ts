@@ -8,6 +8,7 @@ export interface CreateProductInput {
   category_id?: number | null;
   sku_temp?: string | null;
   image_url?: string | null;
+  label_color?: string | null;
   min_stock?: number;
   max_stock?: number;
 }
@@ -18,6 +19,7 @@ export interface UpdateProductInput {
   category_id?: number | null;
   sku_temp?: string | null;
   image_url?: string | null;
+  label_color?: string | null;
   min_stock?: number;
   max_stock?: number;
 }
@@ -127,6 +129,7 @@ export async function getProducts(filters?: { categoryId?: number; search?: stri
       category_id: products.category_id,
       category_name: product_categories.name,
       image_url: products.image_url,
+      label_color: products.label_color,
       min_stock: products.min_stock,
       max_stock: products.max_stock,
       created_at: products.created_at,
@@ -152,6 +155,7 @@ export async function getProductById(id: number) {
       category_id: products.category_id,
       category_name: product_categories.name,
       image_url: products.image_url,
+      label_color: products.label_color,
       min_stock: products.min_stock,
       max_stock: products.max_stock,
       created_at: products.created_at,
@@ -220,6 +224,7 @@ export async function createProduct(input: CreateProductInput) {
       category_id: input.category_id ?? null,
       sku_temp: input.sku_temp ? input.sku_temp.trim() : null,
       image_url: input.image_url ?? null,
+      label_color: input.label_color ? input.label_color.trim() : '#4f46e5',
       min_stock: input.min_stock ?? 10,
       max_stock: input.max_stock ?? 100,
     })
@@ -267,6 +272,10 @@ export async function updateProduct(id: number, input: UpdateProductInput) {
 
   if (input.image_url !== undefined) {
     updateFields.image_url = input.image_url;
+  }
+
+  if (input.label_color !== undefined) {
+    updateFields.label_color = input.label_color ? input.label_color.trim() : '#4f46e5';
   }
 
   if (input.min_stock !== undefined) {

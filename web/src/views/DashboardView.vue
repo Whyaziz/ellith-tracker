@@ -16,19 +16,23 @@ interface DashboardData {
     overstockCount: number;
   };
   salesTrend: Array<{ date: string; count: number; qty: number; label?: string; total_qty?: number; total_orders?: number }>;
-  stockByCategory: Array<{ category: string; total_stock: number }>;
+  stockByCategory: Array<{ category: string; total_stock: number; color?: string }>;
   topSelling: Array<{
     seller_sku: string;
     name: string;
     image_url: string | null;
     category: string;
     total_sold: number;
+    online_sold?: number;
+    offline_sold?: number;
+    label_color?: string;
     current_stock: number;
   }>;
   healthAlerts: Array<{
     seller_sku: string;
     name: string;
     category: string;
+    label_color?: string;
     current_stock: number;
     min_stock: number;
     max_stock: number;
@@ -105,6 +109,28 @@ function isPresetActive(preset: '7d' | '30d' | 'month' | 'all') {
 
 // Filter & Helper Status Peringatan Stok
 const selectedAlertStatus = ref<'all' | 'menipis' | 'berlebih' | 'habis' | 'normal'>('all');
+
+// Filter Channel Produk Terlaris (Default: 'online' sesuai permintaan client)
+const topSellingChannel = ref<'online' | 'offline' | 'all'>('online');
+
+const filteredTopSelling = computed(() => {
+  const items = [...(data.value?.topSelling || [])];
+  if (topSellingChannel.value === 'online') {
+    return items
+      .filter((it) => (it.online_sold ?? 0) > 0 || (it.total_sold ?? 0) > 0)
+      .sort((a, b) => (b.online_sold ?? 0) - (a.online_sold ?? 0))
+      .slice(0, 8);
+  } else if (topSellingChannel.value === 'offline') {
+    return items
+      .filter((it) => (it.offline_sold ?? 0) > 0)
+      .sort((a, b) => (b.offline_sold ?? 0) - (a.offline_sold ?? 0))
+      .slice(0, 8);
+  } else {
+    return items
+      .sort((a, b) => (b.total_sold ?? 0) - (a.total_sold ?? 0))
+      .slice(0, 8);
+  }
+});
 
 const filteredAlerts = computed(() => {
   const alerts = data.value?.healthAlerts || [];
@@ -354,12 +380,7 @@ function renderCategoryChart() {
 
     const labels = skus.map((s) => s.seller_sku);
     const stocks = skus.map((s) => Math.max(0, s.current_stock));
-    const bgColors = skus.map((s) => {
-      if (s.status === 'habis' || s.current_stock <= 0) return '#f43f5e'; // Rose-500
-      if (s.status === 'menipis' || s.current_stock < s.min_stock) return '#f59e0b'; // Amber-500
-      if (s.status === 'berlebih' || s.current_stock > s.max_stock) return '#0ea5e9'; // Sky-500
-      return '#6366f1'; // Indigo-500
-    });
+    const bgColors = skus.map((s) => s.label_color || '#4f46e5');
 
     categoryChartInstance = new Chart(categoryCanvas.value, {
       type: 'bar',
@@ -439,6 +460,8 @@ function renderCategoryChart() {
 
   const categories = data.value.stockByCategory.map((c) => c.category);
   const stocks = data.value.stockByCategory.map((c) => c.total_stock);
+  const bgColors = data.value.stockByCategory.map((c) => c.color || '#4f46e5');
+  const hoverColors = data.value.stockByCategory.map((c) => c.color || '#4338ca');
 
   categoryChartInstance = new Chart(categoryCanvas.value, {
     type: 'bar',
@@ -448,8 +471,8 @@ function renderCategoryChart() {
         {
           label: 'Stok Tersedia',
           data: stocks,
-          backgroundColor: '#4f46e5',
-          hoverBackgroundColor: '#4338ca',
+          backgroundColor: bgColors,
+          hoverBackgroundColor: hoverColors,
           borderRadius: 8,
           barThickness: 16,
         },
@@ -834,19 +857,48 @@ onBeforeUnmount(() => {
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <!-- Top Selling Products -->
       <div class="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm">
-        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-3.5 gap-2.5">
           <div>
             <h2 class="text-sm font-bold uppercase tracking-wider text-slate-900">Produk Terlaris (Top Selling)</h2>
-            <p class="text-xs text-slate-400 mt-0.5">Seller SKU dengan kuantitas pemesanan tertinggi</p>
+            <p class="text-xs text-slate-400 mt-0.5">
+              <span v-if="topSellingChannel === 'online'">Khusus pesanan online (TikTok Shop / ekspedisi)</span>
+              <span v-else-if="topSellingChannel === 'offline'">Khusus pesanan offline / CRM walk-in</span>
+              <span v-else>Gabungan seluruh channel online & offline</span>
+            </p>
           </div>
-          <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
-            Terbanyak
-          </span>
+
+          <!-- Channel Filter Tabs: Online (Default), Offline, Semua -->
+          <div class="inline-flex items-center p-1 bg-slate-100 rounded-xl text-[11px] font-bold self-start sm:self-auto">
+            <button
+              type="button"
+              @click="topSellingChannel = 'online'"
+              class="px-2.5 py-1 rounded-lg transition cursor-pointer"
+              :class="topSellingChannel === 'online' ? 'bg-white text-indigo-700 shadow-2xs' : 'text-slate-500 hover:text-slate-900'"
+            >
+              Online
+            </button>
+            <button
+              type="button"
+              @click="topSellingChannel = 'offline'"
+              class="px-2.5 py-1 rounded-lg transition cursor-pointer"
+              :class="topSellingChannel === 'offline' ? 'bg-white text-indigo-700 shadow-2xs' : 'text-slate-500 hover:text-slate-900'"
+            >
+              Offline
+            </button>
+            <button
+              type="button"
+              @click="topSellingChannel = 'all'"
+              class="px-2.5 py-1 rounded-lg transition cursor-pointer"
+              :class="topSellingChannel === 'all' ? 'bg-white text-indigo-700 shadow-2xs' : 'text-slate-500 hover:text-slate-900'"
+            >
+              Semua
+            </button>
+          </div>
         </div>
 
         <div class="mt-4 divide-y divide-slate-100">
           <div
-            v-for="(item, idx) in data?.topSelling || []"
+            v-for="(item, idx) in filteredTopSelling"
             :key="item.seller_sku"
             class="py-3 flex items-center justify-between"
           >
@@ -869,19 +921,34 @@ onBeforeUnmount(() => {
                 </svg>
               </div>
               <div class="min-w-0">
-                <div class="font-mono font-bold text-xs text-slate-900 truncate">{{ item.seller_sku }}</div>
-                <div class="text-[11px] text-slate-600 truncate">{{ item.name }}</div>
+                <div class="flex items-center space-x-1.5">
+                  <span
+                    class="w-2.5 h-2.5 rounded-full shrink-0 shadow-2xs border border-black/10"
+                    :style="{ backgroundColor: item.label_color || '#4f46e5' }"
+                    :title="`Warna: ${item.label_color || '#4f46e5'}`"
+                  />
+                  <div class="font-mono font-bold text-xs text-slate-900 truncate">{{ item.seller_sku }}</div>
+                </div>
+                <div class="text-[11px] text-slate-600 truncate mt-0.5">{{ item.name }}</div>
               </div>
             </div>
 
             <div class="text-right shrink-0 ml-3">
-              <div class="font-mono font-black text-sm text-slate-900 tabular-nums">{{ item.total_sold }} pcs</div>
+              <div class="font-mono font-black text-sm text-slate-900 tabular-nums">
+                {{
+                  topSellingChannel === 'online'
+                    ? (item.online_sold ?? 0)
+                    : topSellingChannel === 'offline'
+                    ? (item.offline_sold ?? 0)
+                    : item.total_sold
+                }} pcs
+              </div>
               <div class="text-[10px] text-slate-400">Sisa: {{ item.current_stock }} pcs</div>
             </div>
           </div>
 
-          <div v-if="!data?.topSelling?.length" class="text-xs text-slate-400 text-center py-6">
-            Belum ada data penjualan tercatat.
+          <div v-if="!filteredTopSelling.length" class="text-xs text-slate-400 text-center py-6">
+            Belum ada data penjualan pada channel ini.
           </div>
         </div>
       </div>
