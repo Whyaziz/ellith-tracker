@@ -60,6 +60,46 @@ export function runMigrations() {
   } catch (err) {
     console.warn('[db:migrate] Note on customers photo_url column:', err);
   }
+
+  // Auto-populate / normalize label_color based on SKU and product name
+  try {
+    const colorMap: Record<string, string> = {
+      'biru laut': '#0ea5e9',
+      'sage': '#739072',
+      'cream': '#c4a482',
+      'violet': '#8b5cf6',
+      'pink': '#ec4899',
+      'hitam': '#1e293b',
+      'army': '#4d7c0f',
+      'navy': '#1e3a8a',
+      'maroon': '#881337',
+      'custom': '#6366f1',
+    };
+
+    const updateColorStmt = sqlite.prepare('UPDATE products SET label_color = ? WHERE id = ?');
+    const existingProducts = sqlite.prepare('SELECT id, name, sku_temp FROM products').all() as Array<{
+      id: number;
+      name: string;
+      sku_temp: string | null;
+    }>;
+
+    let updatedCount = 0;
+    for (const p of existingProducts) {
+      const combined = `${p.sku_temp || ''} ${p.name || ''}`.toLowerCase();
+      for (const [key, colorHex] of Object.entries(colorMap)) {
+        if (combined.includes(key)) {
+          updateColorStmt.run(colorHex, p.id);
+          updatedCount++;
+          break;
+        }
+      }
+    }
+    if (updatedCount > 0) {
+      console.log(`[db:migrate] Synchronized label_color for ${updatedCount} products based on SKU color.`);
+    }
+  } catch (err) {
+    console.warn('[db:migrate] Note on normalizing product label colors:', err);
+  }
 }
 
 // Run immediately if executed directly via CLI

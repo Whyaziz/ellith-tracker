@@ -2,6 +2,21 @@ import { eq, or, like, sql, desc, asc } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import { product_categories, products } from '../db/schema.js';
 
+export function detectProductColor(text: string): string {
+  const lower = text.toLowerCase();
+  if (lower.includes('biru laut')) return '#0ea5e9';
+  if (lower.includes('sage')) return '#739072';
+  if (lower.includes('cream')) return '#c4a482';
+  if (lower.includes('violet')) return '#8b5cf6';
+  if (lower.includes('pink')) return '#ec4899';
+  if (lower.includes('hitam')) return '#1e293b';
+  if (lower.includes('army')) return '#4d7c0f';
+  if (lower.includes('navy')) return '#1e3a8a';
+  if (lower.includes('maroon')) return '#881337';
+  if (lower.includes('custom')) return '#6366f1';
+  return '#4f46e5';
+}
+
 export interface CreateProductInput {
   seller_sku: string;
   name: string;
@@ -224,7 +239,9 @@ export async function createProduct(input: CreateProductInput) {
       category_id: input.category_id ?? null,
       sku_temp: input.sku_temp ? input.sku_temp.trim() : null,
       image_url: input.image_url ?? null,
-      label_color: input.label_color ? input.label_color.trim() : '#4f46e5',
+      label_color: input.label_color
+        ? input.label_color.trim()
+        : detectProductColor(`${seller_sku} ${name} ${input.sku_temp || ''}`),
       min_stock: input.min_stock ?? 10,
       max_stock: input.max_stock ?? 100,
     })

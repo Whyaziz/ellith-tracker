@@ -25,18 +25,18 @@ interface Product {
 const activeTab = ref<'products' | 'categories'>('products');
 
 const presetColors = [
-  '#4f46e5', // Indigo
-  '#3b82f6', // Blue
-  '#06b6d4', // Cyan
-  '#10b981', // Emerald
-  '#14b8a6', // Teal
-  '#f59e0b', // Amber
-  '#f97316', // Orange
-  '#ef4444', // Red
-  '#8b5cf6', // Purple
+  '#1e293b', // Hitam
+  '#1e3a8a', // Navy
+  '#0ea5e9', // Biru Laut
+  '#739072', // Sage
+  '#4d7c0f', // Army
+  '#881337', // Maroon
   '#ec4899', // Pink
-  '#64748b', // Slate
-  '#0f172a', // Dark
+  '#8b5cf6', // Violet
+  '#c4a482', // Cream
+  '#6366f1', // Custom
+  '#4f46e5', // Indigo
+  '#f59e0b', // Amber
 ];
 
 // Products State
@@ -202,6 +202,30 @@ async function handleImageFileChange(e: Event) {
     }
   } finally {
     isUploadingImage.value = false;
+  }
+}
+
+function autoDetectColorFromName(name: string, sku: string = ''): string | null {
+  const text = `${sku} ${name}`.toLowerCase();
+  if (text.includes('biru laut')) return '#0ea5e9';
+  if (text.includes('sage')) return '#739072';
+  if (text.includes('cream')) return '#c4a482';
+  if (text.includes('violet')) return '#8b5cf6';
+  if (text.includes('pink')) return '#ec4899';
+  if (text.includes('hitam')) return '#1e293b';
+  if (text.includes('army')) return '#4d7c0f';
+  if (text.includes('navy')) return '#1e3a8a';
+  if (text.includes('maroon')) return '#881337';
+  if (text.includes('custom')) return '#6366f1';
+  return null;
+}
+
+function onSkuOrNameInput() {
+  if (!isEditingProduct.value) {
+    const detected = autoDetectColorFromName(productForm.value.name, productForm.value.seller_sku);
+    if (detected) {
+      productForm.value.label_color = detected;
+    }
   }
 }
 
@@ -712,6 +736,7 @@ onMounted(() => {
             </label>
             <input
               v-model="productForm.seller_sku"
+              @input="onSkuOrNameInput"
               type="text"
               required
               placeholder="cth: CLN-KULOT-BLK-L"
@@ -726,6 +751,7 @@ onMounted(() => {
             </label>
             <input
               v-model="productForm.name"
+              @input="onSkuOrNameInput"
               type="text"
               required
               placeholder="cth: Celana Kulot Highwaist Katun Hitam L"
