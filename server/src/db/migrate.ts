@@ -114,7 +114,7 @@ export function runMigrations() {
     console.warn('[db:migrate] Note on creating system_settings table:', err);
   }
 
-  // Ensure database index on order_items(seller_sku) and stock_batch_items(seller_sku)
+  // Ensure database index on performance-critical columns
   try {
     sqlite.prepare(`
       CREATE INDEX IF NOT EXISTS order_items_seller_sku_idx ON order_items(seller_sku)
@@ -122,8 +122,20 @@ export function runMigrations() {
     sqlite.prepare(`
       CREATE INDEX IF NOT EXISTS stock_batch_items_seller_sku_idx ON stock_batch_items(seller_sku)
     `).run();
+    sqlite.prepare(`
+      CREATE INDEX IF NOT EXISTS orders_ship_date_idx ON orders(ship_date)
+    `).run();
+    sqlite.prepare(`
+      CREATE INDEX IF NOT EXISTS orders_created_at_idx ON orders(created_at)
+    `).run();
+    sqlite.prepare(`
+      CREATE INDEX IF NOT EXISTS scan_logs_scanned_at_idx ON scan_logs(scanned_at)
+    `).run();
+    sqlite.prepare(`
+      CREATE INDEX IF NOT EXISTS scan_logs_mode_result_idx ON scan_logs(mode, result)
+    `).run();
   } catch (err) {
-    console.warn('[db:migrate] Note on creating seller_sku indexes:', err);
+    console.warn('[db:migrate] Note on creating performance indexes:', err);
   }
 }
 

@@ -86,43 +86,64 @@ export async function getCustomers(filters?: {
       ? await query.where(sql.join(conditions, sql` AND `)).orderBy(desc(customers.id))
       : await query.orderBy(desc(customers.id));
 
-  // Ambil semua pesanan offline beserta items untuk kalkulasi total pembelian
-  const allOrders = await db.select().from(offline_orders);
-  const allItems = await db.select().from(offline_order_items);
+  // Agregasi item dan pesanan secara efisien dengan Map O(O + I)
+  const allOrders = await db.select({
+    id: offline_orders.id,
+    customer_id: offline_orders.customer_id,
+    customer_name: offline_orders.customer_name,
+    order_date: offline_orders.order_date,
+  }).from(offline_orders);
 
-  // Map order items by offline_order_id
-  const itemsByOrderId = new Map<number, typeof allItems>();
+  const allItems = await db.select({
+    offline_order_id: offline_order_items.offline_order_id,
+    qty: offline_order_items.qty,
+  }).from(offline_order_items);
+
+  const orderQtyMap = new Map<number, number>();
   for (const item of allItems) {
-    const arr = itemsByOrderId.get(item.offline_order_id) || [];
-    arr.push(item);
-    itemsByOrderId.set(item.offline_order_id, arr);
+    orderQtyMap.set(item.offline_order_id, (orderQtyMap.get(item.offline_order_id) || 0) + (item.qty || 0));
+  }
+
+  // Pre-agregasi per customer_id dan per customer_name
+  const custIdStats = new Map<number, { totalOrders: number; totalQty: number; latestDate: string | null }>();
+  const custNameStats = new Map<string, { totalOrders: number; totalQty: number; latestDate: string | null }>();
+
+  for (const ord of allOrders) {
+    const qty = orderQtyMap.get(ord.id) || 0;
+    if (ord.customer_id) {
+      const stat = custIdStats.get(ord.customer_id) || { totalOrders: 0, totalQty: 0, latestDate: null };
+      stat.totalOrders += 1;
+      stat.totalQty += qty;
+      if (!stat.latestDate || ord.order_date > stat.latestDate) {
+        stat.latestDate = ord.order_date;
+      }
+      custIdStats.set(ord.customer_id, stat);
+    } else if (ord.customer_name) {
+      const nameKey = ord.customer_name.trim().toLowerCase();
+      const stat = custNameStats.get(nameKey) || { totalOrders: 0, totalQty: 0, latestDate: null };
+      stat.totalOrders += 1;
+      stat.totalQty += qty;
+      if (!stat.latestDate || ord.order_date > stat.latestDate) {
+        stat.latestDate = ord.order_date;
+      }
+      custNameStats.set(nameKey, stat);
+    }
   }
 
   return rows.map((cust) => {
-    // Cari pesanan yang terhubung ke pelanggan (by customer_id ATAU nama yang persis sama)
-    const custOrders = allOrders.filter(
-      (ord) =>
-        ord.customer_id === cust.id ||
-        (!ord.customer_id && ord.customer_name.trim().toLowerCase() === cust.name.trim().toLowerCase())
-    );
+    const byId = custIdStats.get(cust.id);
+    const byName = custNameStats.get(cust.name.trim().toLowerCase());
 
-    let totalItems = 0;
-    let latestDate: string | null = null;
+    const totalOrdersCount = (byId?.totalOrders || 0) + (byName?.totalOrders || 0);
+    const totalItemsPurchased = (byId?.totalQty || 0) + (byName?.totalQty || 0);
 
-    for (const ord of custOrders) {
-      const orderItems = itemsByOrderId.get(ord.id) || [];
-      const orderTotalQty = orderItems.reduce((acc, it) => acc + (it.qty || 0), 0);
-      totalItems += orderTotalQty;
-
-      if (!latestDate || ord.order_date > latestDate) {
-        latestDate = ord.order_date;
-      }
-    }
+    const dates = [byId?.latestDate, byName?.latestDate].filter(Boolean) as string[];
+    const latestDate = dates.length > 0 ? dates.sort().reverse()[0] : null;
 
     return {
       ...cust,
-      total_items_purchased: totalItems,
-      total_orders_count: custOrders.length,
+      total_items_purchased: totalItemsPurchased,
+      total_orders_count: totalOrdersCount,
       last_order_date: latestDate,
     };
   });

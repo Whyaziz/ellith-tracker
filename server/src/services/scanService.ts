@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs';
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, sql } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import { orders, order_items, scan_logs, users } from '../db/schema.js';
 
@@ -339,25 +339,40 @@ export async function getRecentScanLogs(limit = 30) {
 }
 
 export async function getScanStats() {
-  const allLogs = await db.select().from(scan_logs);
-  const allOrders = await db.select().from(orders);
+  const [logStats] = await db
+    .select({
+      totalLogs: sql<number>`count(*)`,
+      packingSuccess: sql<number>`coalesce(sum(case when ${scan_logs.mode} = 'packing' and ${scan_logs.result} = 'ok' then 1 else 0 end), 0)`,
+      shippingSuccess: sql<number>`coalesce(sum(case when ${scan_logs.mode} = 'pengiriman' and ${scan_logs.result} = 'ok' then 1 else 0 end), 0)`,
+      duplicates: sql<number>`coalesce(sum(case when ${scan_logs.result} = 'duplikat' then 1 else 0 end), 0)`,
+      notFound: sql<number>`coalesce(sum(case when ${scan_logs.result} = 'tidak_ditemukan' then 1 else 0 end), 0)`,
+      invalidStatus: sql<number>`coalesce(sum(case when ${scan_logs.result} = 'status_tidak_valid' then 1 else 0 end), 0)`,
+    })
+    .from(scan_logs);
 
-  const stats = {
-    totalLogs: allLogs.length,
-    packingSuccess: allLogs.filter((l) => l.mode === 'packing' && l.result === 'ok').length,
-    shippingSuccess: allLogs.filter((l) => l.mode === 'pengiriman' && l.result === 'ok').length,
-    duplicates: allLogs.filter((l) => l.result === 'duplikat').length,
-    notFound: allLogs.filter((l) => l.result === 'tidak_ditemukan').length,
-    invalidStatus: allLogs.filter((l) => l.result === 'status_tidak_valid').length,
+  const [orderStats] = await db
+    .select({
+      totalOrders: sql<number>`count(*)`,
+      waitingPacked: sql<number>`coalesce(sum(case when ${orders.is_packed} = 0 then 1 else 0 end), 0)`,
+      packed: sql<number>`coalesce(sum(case when ${orders.is_packed} = 1 and ${orders.is_shipped} = 0 then 1 else 0 end), 0)`,
+      shipped: sql<number>`coalesce(sum(case when ${orders.is_shipped} = 1 then 1 else 0 end), 0)`,
+    })
+    .from(orders);
+
+  return {
+    totalLogs: Number(logStats?.totalLogs || 0),
+    packingSuccess: Number(logStats?.packingSuccess || 0),
+    shippingSuccess: Number(logStats?.shippingSuccess || 0),
+    duplicates: Number(logStats?.duplicates || 0),
+    notFound: Number(logStats?.notFound || 0),
+    invalidStatus: Number(logStats?.invalidStatus || 0),
 
     // Real-time Order Counts
-    totalOrders: allOrders.length,
-    waitingPacked: allOrders.filter((o) => !o.is_packed).length,
-    packed: allOrders.filter((o) => o.is_packed && !o.is_shipped).length,
-    shipped: allOrders.filter((o) => o.is_shipped).length,
+    totalOrders: Number(orderStats?.totalOrders || 0),
+    waitingPacked: Number(orderStats?.waitingPacked || 0),
+    packed: Number(orderStats?.packed || 0),
+    shipped: Number(orderStats?.shipped || 0),
   };
-
-  return stats;
 }
 
 export async function clearScanLogs(userId: number, password: string) {

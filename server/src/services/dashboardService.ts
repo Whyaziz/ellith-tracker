@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import {
   orders,
@@ -40,22 +40,6 @@ function parseToYmd(dateStr: string | null | undefined): string {
  * Mengambil tren penjualan harian dengan filter rentang tanggal khusus untuk Line Chart
  */
 export async function getSalesTrend(filter: SalesTrendFilter = {}) {
-  const onlineOrders = await db.select().from(orders);
-  const onlineItems = await db.select().from(order_items);
-  const offlineOrdersList = await db.select().from(offline_orders);
-  const offlineItems = await db.select().from(offline_order_items);
-
-  // Map item counts per order
-  const onlineQtyMap = new Map<number, number>();
-  for (const it of onlineItems) {
-    onlineQtyMap.set(it.order_id, (onlineQtyMap.get(it.order_id) || 0) + it.qty);
-  }
-
-  const offlineQtyMap = new Map<number, number>();
-  for (const it of offlineItems) {
-    offlineQtyMap.set(it.offline_order_id, (offlineQtyMap.get(it.offline_order_id) || 0) + it.qty);
-  }
-
   let { timeframe, startDate, endDate } = filter;
   const now = new Date();
 
@@ -78,6 +62,53 @@ export async function getSalesTrend(filter: SalesTrendFilter = {}) {
       startDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
       endDate = now.toISOString().slice(0, 10);
     }
+  }
+
+  // Ambil hanya kolom yang dibutuhkan untuk line chart
+  const onlineOrders = await db
+    .select({
+      id: orders.id,
+      status: orders.status,
+      ship_date: orders.ship_date,
+      created_at: orders.created_at,
+      qty_total: orders.qty_total,
+    })
+    .from(orders);
+
+  const offlineOrdersList = await db
+    .select({
+      id: offline_orders.id,
+      status: offline_orders.status,
+      order_date: offline_orders.order_date,
+      created_at: offline_orders.created_at,
+    })
+    .from(offline_orders);
+
+  // Agregasi kuantitas item per pesanan via SQL GROUP BY (ringan & instan)
+  const offlineQtyRows = await db
+    .select({
+      order_id: offline_order_items.offline_order_id,
+      total_qty: sql<number>`coalesce(sum(${offline_order_items.qty}), 0)`,
+    })
+    .from(offline_order_items)
+    .groupBy(offline_order_items.offline_order_id);
+
+  const offlineQtyMap = new Map<number, number>();
+  for (const it of offlineQtyRows) {
+    offlineQtyMap.set(it.order_id, Number(it.total_qty || 0));
+  }
+
+  const onlineQtyRows = await db
+    .select({
+      order_id: order_items.order_id,
+      total_qty: sql<number>`coalesce(sum(${order_items.qty}), 0)`,
+    })
+    .from(order_items)
+    .groupBy(order_items.order_id);
+
+  const onlineQtyMap = new Map<number, number>();
+  for (const it of onlineQtyRows) {
+    onlineQtyMap.set(it.order_id, Number(it.total_qty || 0));
   }
 
   const dailySalesMap = new Map<string, { total_orders: number; total_qty: number }>();
@@ -174,27 +205,29 @@ export async function getDashboardData(
     timeframe = timeframeOrOptions;
   }
 
-  // 1. Ambil Stock Overview per SKU
+  // 1. Ambil Stock Overview per SKU (Optimized Hash Map)
   const stockOverview = await getStockOverview();
 
-  // 2. Ambil seluruh pesanan online
-  const onlineOrders = await db.select().from(orders);
+  // --- STATS CARDS (via SQL Aggregate tanpa memuat seluruh baris data ke RAM) ---
+  const [onlineStats] = await db
+    .select({
+      total: sql<number>`count(*)`,
+      shipped: sql<number>`coalesce(sum(case when ${orders.status} in ('dikirim', 'selesai', 'selesai_kirim') then 1 else 0 end), 0)`,
+      canceled: sql<number>`coalesce(sum(case when ${orders.status} = 'dibatalkan' then 1 else 0 end), 0)`,
+    })
+    .from(orders);
 
-  // 3. Ambil seluruh pesanan offline
-  const offlineOrdersList = await db.select().from(offline_orders);
+  const [offlineStats] = await db
+    .select({
+      total: sql<number>`count(*)`,
+      shipped: sql<number>`coalesce(sum(case when ${offline_orders.status} in ('dikirim', 'selesai', 'selesai_kirim') then 1 else 0 end), 0)`,
+      canceled: sql<number>`coalesce(sum(case when ${offline_orders.status} = 'dibatalkan' then 1 else 0 end), 0)`,
+    })
+    .from(offline_orders);
 
-  // --- STATS CARDS ---
-  const total_orders = onlineOrders.length + offlineOrdersList.length;
-
-  const total_shipped_orders =
-    onlineOrders.filter((o) => o.status === 'dikirim' || o.status === 'selesai').length +
-    offlineOrdersList.filter(
-      (o) => o.status === 'dikirim' || o.status === 'selesai' || o.status === 'selesai_kirim'
-    ).length;
-
-  const total_canceled_orders =
-    onlineOrders.filter((o) => o.status === 'dibatalkan').length +
-    offlineOrdersList.filter((o) => o.status === 'dibatalkan').length;
+  const total_orders = Number(onlineStats?.total || 0) + Number(offlineStats?.total || 0);
+  const total_shipped_orders = Number(onlineStats?.shipped || 0) + Number(offlineStats?.shipped || 0);
+  const total_canceled_orders = Number(onlineStats?.canceled || 0) + Number(offlineStats?.canceled || 0);
 
   // Total item terjual aktif (tidak termasuk canceled)
   const total_items_sold = stockOverview.reduce((sum, s) => sum + s.total_sold, 0);

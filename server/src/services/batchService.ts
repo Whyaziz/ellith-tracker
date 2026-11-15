@@ -446,10 +446,20 @@ export async function getOrders(filters: {
       ? await baseQuery.where(and(...conditions)).orderBy(desc(orders.id))
       : await baseQuery.orderBy(desc(orders.id));
 
-  // Fetch items for these orders
+  // Fetch items only for these filtered orders (chunked to prevent SQLite parameter limits)
   const orderIds = rows.map((r) => r.id);
-  const allItems =
-    orderIds.length > 0 ? await db.select().from(order_items) : [];
+  const allItems: (typeof order_items.$inferSelect)[] = [];
+  if (orderIds.length > 0) {
+    const chunkSize = 500;
+    for (let i = 0; i < orderIds.length; i += chunkSize) {
+      const chunk = orderIds.slice(i, i + chunkSize);
+      const itemsChunk = await db
+        .select()
+        .from(order_items)
+        .where(inArray(order_items.order_id, chunk));
+      allItems.push(...itemsChunk);
+    }
+  }
 
   const itemsByOrderId = new Map<number, (typeof order_items.$inferSelect)[]>();
   for (const item of allItems) {

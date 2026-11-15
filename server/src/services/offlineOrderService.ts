@@ -1,4 +1,4 @@
-import { eq, or, like, sql, desc } from 'drizzle-orm';
+import { eq, or, like, sql, desc, inArray } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import { offline_orders, offline_order_items, products, customers } from '../db/schema.js';
 import { findProductBySellerSku } from './productService.js';
@@ -142,23 +142,38 @@ export async function getOfflineOrders(filters?: {
       ? await query.where(sql.join(conditions, sql` AND `)).orderBy(desc(offline_orders.id))
       : await query.orderBy(desc(offline_orders.id));
 
-  // Ambil items untuk setiap pesanan offline
-  const result = [];
-  for (const ord of rows) {
-    const items = await db
-      .select()
-      .from(offline_order_items)
-      .where(eq(offline_order_items.offline_order_id, ord.id));
+  // Ambil items untuk pesanan offline secara efisien (menghindari N+1 query)
+  const orderIds = rows.map((r) => r.id);
+  const allItems: (typeof offline_order_items.$inferSelect)[] = [];
+  if (orderIds.length > 0) {
+    const chunkSize = 500;
+    for (let i = 0; i < orderIds.length; i += chunkSize) {
+      const chunk = orderIds.slice(i, i + chunkSize);
+      const itemsChunk = await db
+        .select()
+        .from(offline_order_items)
+        .where(inArray(offline_order_items.offline_order_id, chunk));
+      allItems.push(...itemsChunk);
+    }
+  }
 
-    result.push({
+  const itemsByOrderId = new Map<number, (typeof offline_order_items.$inferSelect)[]>();
+  for (const item of allItems) {
+    if (!itemsByOrderId.has(item.offline_order_id)) {
+      itemsByOrderId.set(item.offline_order_id, []);
+    }
+    itemsByOrderId.get(item.offline_order_id)!.push(item);
+  }
+
+  return rows.map((ord) => {
+    const items = itemsByOrderId.get(ord.id) || [];
+    return {
       ...ord,
       items,
       total_qty: items.reduce((s, it) => s + it.qty, 0),
       total_amount: items.reduce((s, it) => s + it.qty * (it.price || 0), 0),
-    });
-  }
-
-  return result;
+    };
+  });
 }
 
 export async function getOfflineOrderById(id: number) {

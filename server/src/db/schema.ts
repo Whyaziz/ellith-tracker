@@ -76,6 +76,8 @@ export const orders = sqliteTable(
     index('orders_is_packed_idx').on(table.is_packed),
     index('orders_is_shipped_idx').on(table.is_shipped),
     index('orders_needs_review_idx').on(table.needs_review),
+    index('orders_ship_date_idx').on(table.ship_date),
+    index('orders_created_at_idx').on(table.created_at),
   ]
 );
 
@@ -117,6 +119,8 @@ export const scan_logs = sqliteTable(
   (table) => [
     index('scan_logs_order_id_idx').on(table.order_id),
     index('scan_logs_resi_idx').on(table.resi_scanned),
+    index('scan_logs_scanned_at_idx').on(table.scanned_at),
+    index('scan_logs_mode_result_idx').on(table.mode, table.result),
   ]
 );
 
