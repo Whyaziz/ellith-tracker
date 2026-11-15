@@ -35,7 +35,9 @@ const isOpen = ref(false);
 const searchQuery = ref('');
 const searchInputRef = ref<HTMLInputElement | null>(null);
 const containerRef = ref<HTMLElement | null>(null);
+const dropdownRef = ref<HTMLElement | null>(null);
 const highlightedIndex = ref(0);
+const dropdownStyle = ref<Record<string, string>>({});
 
 const selectedOption = computed(() => {
   return props.options.find((opt) => opt.value === props.modelValue) || null;
@@ -56,15 +58,57 @@ watch(filteredOptions, () => {
   highlightedIndex.value = 0;
 });
 
+function updateDropdownPosition() {
+  if (!containerRef.value || !isOpen.value) return;
+  const rect = containerRef.value.getBoundingClientRect();
+  const spaceBelow = window.innerHeight - rect.bottom;
+  const spaceAbove = rect.top;
+
+  let top: string | undefined = undefined;
+  let bottom: string | undefined = undefined;
+
+  // If space below is restricted (< 250px) and there's more space above, open upwards
+  if (spaceBelow < 250 && spaceAbove > spaceBelow) {
+    bottom = `${Math.round(window.innerHeight - rect.top + 4)}px`;
+  } else {
+    top = `${Math.round(rect.bottom + 4)}px`;
+  }
+
+  const targetWidth = Math.max(rect.width, 260);
+  const maxLeft = window.innerWidth - targetWidth - 12;
+  const left = Math.max(12, Math.min(rect.left, maxLeft));
+
+  dropdownStyle.value = {
+    ...(top ? { top } : {}),
+    ...(bottom ? { bottom } : {}),
+    left: `${Math.round(left)}px`,
+    width: `${Math.round(targetWidth)}px`,
+    position: 'fixed',
+    zIndex: '9999',
+  };
+}
+
+watch(isOpen, (open) => {
+  if (open) {
+    updateDropdownPosition();
+    nextTick(() => {
+      updateDropdownPosition();
+      searchInputRef.value?.focus();
+    });
+    window.addEventListener('scroll', updateDropdownPosition, true);
+    window.addEventListener('resize', updateDropdownPosition);
+  } else {
+    window.removeEventListener('scroll', updateDropdownPosition, true);
+    window.removeEventListener('resize', updateDropdownPosition);
+  }
+});
+
 function toggleDropdown() {
   if (props.disabled) return;
   isOpen.value = !isOpen.value;
   if (isOpen.value) {
     searchQuery.value = '';
     highlightedIndex.value = 0;
-    nextTick(() => {
-      searchInputRef.value?.focus();
-    });
   }
 }
 
@@ -113,7 +157,12 @@ function onKeyDown(event: KeyboardEvent) {
 }
 
 function handleClickOutside(event: MouseEvent) {
-  if (containerRef.value && !containerRef.value.contains(event.target as Node)) {
+  const target = event.target as Node;
+  if (
+    containerRef.value &&
+    !containerRef.value.contains(target) &&
+    (!dropdownRef.value || !dropdownRef.value.contains(target))
+  ) {
     isOpen.value = false;
   }
 }
@@ -124,6 +173,8 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   document.removeEventListener('click', handleClickOutside);
+  window.removeEventListener('scroll', updateDropdownPosition, true);
+  window.removeEventListener('resize', updateDropdownPosition);
 });
 </script>
 
@@ -145,25 +196,27 @@ onBeforeUnmount(() => {
       <div class="flex items-center space-x-2 truncate pr-2">
         <template v-if="selectedOption">
           <span class="font-mono font-bold text-slate-900 truncate">{{ selectedOption.value }}</span>
-          <span class="text-slate-400 font-normal truncate">• {{ selectedOption.label }}</span>
+          <span class="text-slate-500 font-medium truncate">• {{ selectedOption.label }}</span>
         </template>
         <template v-else>
-          <span class="text-slate-400 font-normal">{{ placeholder }}</span>
+          <span class="text-slate-500 font-normal">{{ placeholder }}</span>
         </template>
       </div>
 
       <div class="flex items-center space-x-1 shrink-0">
         <!-- Clear button if selected -->
-        <span
+        <button
+          type="button"
           v-if="selectedOption && !disabled"
           @click="clearSelection"
-          class="p-0.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded transition cursor-pointer"
+          class="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-md transition cursor-pointer"
           title="Hapus pilihan"
+          aria-label="Hapus pilihan"
         >
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
           </svg>
-        </span>
+        </button>
         <!-- Chevron -->
         <svg
           class="w-4 h-4 text-slate-400 transition-transform duration-200"
@@ -187,74 +240,79 @@ onBeforeUnmount(() => {
       class="sr-only"
     />
 
-    <!-- Dropdown Menu Popup -->
-    <div
-      v-if="isOpen"
-      class="absolute z-50 mt-1.5 w-full bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-100"
-    >
-      <!-- Search Input Container -->
-      <div class="p-2 border-b border-slate-100 bg-slate-50/70">
-        <div class="relative">
-          <svg
-            class="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-            />
-          </svg>
-          <input
-            ref="searchInputRef"
-            v-model="searchQuery"
-            type="text"
-            :placeholder="searchPlaceholder"
-            class="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
-            @click.stop
-          />
-        </div>
-      </div>
-
-      <!-- Options List -->
-      <div class="max-h-56 overflow-y-auto py-1 divide-y divide-slate-50">
-        <div
-          v-for="(opt, idx) in filteredOptions"
-          :key="opt.value"
-          @click="selectOption(opt)"
-          @mouseenter="highlightedIndex = idx"
-          class="px-3 py-2 text-xs flex items-center justify-between cursor-pointer transition"
-          :class="[
-            highlightedIndex === idx ? 'bg-indigo-50/80 text-indigo-900' : 'text-slate-700 hover:bg-slate-50',
-            opt.value === modelValue ? 'font-bold bg-indigo-50 text-indigo-700' : '',
-          ]"
-        >
-          <div class="flex flex-col truncate pr-2">
-            <span class="font-mono font-bold text-slate-900 truncate">
-              {{ opt.value }}
-            </span>
-            <span class="text-[11px] text-slate-500 truncate mt-0.5">
-              {{ opt.label }}
-            </span>
-          </div>
-
-          <div v-if="opt.badge !== undefined" class="shrink-0">
-            <span
-              class="px-2 py-0.5 text-[10px] font-bold rounded-full font-mono"
-              :class="opt.badgeClass || 'bg-slate-100 text-slate-600'"
+    <!-- Teleported Dropdown Menu Popup (Never clipped by modal / overflow containers) -->
+    <Teleport to="body">
+      <div
+        v-if="isOpen"
+        ref="dropdownRef"
+        :style="dropdownStyle"
+        class="bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-100 text-left"
+        @keydown="onKeyDown"
+      >
+        <!-- Search Input Container -->
+        <div class="p-2 border-b border-slate-100 bg-slate-50/70">
+          <div class="relative">
+            <svg
+              class="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
             >
-              {{ opt.badge }}
-            </span>
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+              />
+            </svg>
+            <input
+              ref="searchInputRef"
+              v-model="searchQuery"
+              type="text"
+              :placeholder="searchPlaceholder"
+              class="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+              @click.stop
+            />
           </div>
         </div>
 
-        <div v-if="filteredOptions.length === 0" class="p-4 text-center text-xs text-slate-400">
-          Tidak ada produk yang cocok dengan pencarian
+        <!-- Options List -->
+        <div class="max-h-60 overflow-y-auto py-1 divide-y divide-slate-50">
+          <div
+            v-for="(opt, idx) in filteredOptions"
+            :key="opt.value"
+            @click="selectOption(opt)"
+            @mouseenter="highlightedIndex = idx"
+            class="px-3 py-2 text-xs flex items-center justify-between cursor-pointer transition select-none"
+            :class="[
+              highlightedIndex === idx ? 'bg-indigo-50/80 text-indigo-900' : 'text-slate-700 hover:bg-slate-50',
+              opt.value === modelValue ? 'font-bold bg-indigo-50 text-indigo-700' : '',
+            ]"
+          >
+            <div class="flex flex-col truncate pr-2">
+              <span class="font-mono font-bold text-slate-900 truncate">
+                {{ opt.value }}
+              </span>
+              <span class="text-[11px] text-slate-500 truncate mt-0.5">
+                {{ opt.label }}
+              </span>
+            </div>
+
+            <div v-if="opt.badge !== undefined" class="shrink-0">
+              <span
+                class="px-2 py-0.5 text-[10px] font-bold rounded-full font-mono"
+                :class="opt.badgeClass || 'bg-slate-100 text-slate-600'"
+              >
+                {{ opt.badge }}
+              </span>
+            </div>
+          </div>
+
+          <div v-if="filteredOptions.length === 0" class="p-4 text-center text-xs text-slate-400">
+            Tidak ada produk yang cocok dengan pencarian
+          </div>
         </div>
       </div>
-    </div>
+    </Teleport>
   </div>
 </template>

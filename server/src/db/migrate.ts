@@ -100,6 +100,31 @@ export function runMigrations() {
   } catch (err) {
     console.warn('[db:migrate] Note on normalizing product label colors:', err);
   }
+
+  // Ensure system_settings table exists
+  try {
+    sqlite.prepare(`
+      CREATE TABLE IF NOT EXISTS system_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        updated_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
+      )
+    `).run();
+  } catch (err) {
+    console.warn('[db:migrate] Note on creating system_settings table:', err);
+  }
+
+  // Ensure database index on order_items(seller_sku) and stock_batch_items(seller_sku)
+  try {
+    sqlite.prepare(`
+      CREATE INDEX IF NOT EXISTS order_items_seller_sku_idx ON order_items(seller_sku)
+    `).run();
+    sqlite.prepare(`
+      CREATE INDEX IF NOT EXISTS stock_batch_items_seller_sku_idx ON stock_batch_items(seller_sku)
+    `).run();
+  } catch (err) {
+    console.warn('[db:migrate] Note on creating seller_sku indexes:', err);
+  }
 }
 
 // Run immediately if executed directly via CLI

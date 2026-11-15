@@ -1240,21 +1240,21 @@ onUnmounted(() => {
               >
                 <span
                   v-if="order.status === 'dibatalkan'"
-                  class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200"
+                  class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-50 text-rose-800 border border-rose-300"
                 >
-                  <span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+                  <span class="w-1.5 h-1.5 rounded-full bg-rose-600"></span>
                   Dibatalkan
                 </span>
                 <span
                   v-else-if="order.is_packed"
-                  class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200/80"
+                  class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-900 border border-emerald-300"
                 >
                   <span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
                   Dikemas
                 </span>
                 <span
                   v-else
-                  class="inline-flex items-center px-2 py-1 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200/60"
+                  class="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-900 border border-amber-300"
                 >
                   Menunggu
                 </span>
@@ -1267,21 +1267,21 @@ onUnmounted(() => {
               >
                 <span
                   v-if="order.status === 'dibatalkan'"
-                  class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200"
+                  class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-50 text-rose-800 border border-rose-300"
                 >
-                  <span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+                  <span class="w-1.5 h-1.5 rounded-full bg-rose-600"></span>
                   Dibatalkan
                 </span>
                 <span
                   v-else-if="order.is_shipped"
-                  class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-50 text-blue-800 border border-blue-200/80"
+                  class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-indigo-50 text-indigo-900 border border-indigo-300"
                 >
-                  <span class="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
+                  <span class="w-1.5 h-1.5 rounded-full bg-indigo-600"></span>
                   Dikirim
                 </span>
                 <span
                   v-else
-                  class="inline-flex items-center px-2 py-1 rounded-full text-[10px] font-medium bg-slate-100 text-slate-500"
+                  class="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-300"
                 >
                   Belum
                 </span>

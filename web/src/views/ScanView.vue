@@ -835,28 +835,28 @@ onUnmounted(() => {
               <td class="px-4 py-3 whitespace-nowrap">
                 <span
                   v-if="log.result === 'ok'"
-                  class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800"
+                  class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800"
                 >
                   <span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
                   BERHASIL
                 </span>
                 <span
                   v-else-if="log.result === 'duplikat'"
-                  class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800"
+                  class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800"
                 >
                   <span class="w-1.5 h-1.5 rounded-full bg-amber-600"></span>
                   DUPLIKAT
                 </span>
                 <span
                   v-else-if="log.result === 'status_tidak_valid'"
-                  class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800"
+                  class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-purple-100 text-purple-800"
                 >
                   <span class="w-1.5 h-1.5 rounded-full bg-purple-600"></span>
                   BELUM DIKEMAS
                 </span>
                 <span
                   v-else
-                  class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800"
+                  class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800"
                 >
                   <span class="w-1.5 h-1.5 rounded-full bg-rose-600"></span>
                   TIDAK DITEMUKAN
@@ -864,7 +864,7 @@ onUnmounted(() => {
               </td>
               <td class="px-4 py-3 text-slate-700">
                 <div class="font-bold">{{ log.recipient_name ?? '-' }}</div>
-                <div class="text-[11px] text-slate-400 truncate max-w-xs">
+                <div class="text-[11px] text-slate-500 truncate max-w-xs">
                   {{ log.recipient_address ?? '-' }}
                 </div>
               </td>

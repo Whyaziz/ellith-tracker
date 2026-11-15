@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import { ChevronLeft, ChevronRight } from 'lucide-vue-next';
 
 interface Props {
   currentPage: number;
@@ -109,25 +110,24 @@ const visiblePages = computed(() => {
     </div>
 
     <!-- Right: Page Navigation Pills -->
-    <div class="flex items-center space-x-1">
+    <div class="flex items-center space-x-1.5">
       <!-- Previous Page Button -->
       <button
         type="button"
         @click="setPage(currentPage - 1)"
         :disabled="currentPage <= 1"
-        class="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer"
+        class="w-8 h-8 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed transition flex items-center justify-center cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600"
         title="Halaman Sebelumnya"
+        aria-label="Halaman Sebelumnya"
       >
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-        </svg>
+        <ChevronLeft class="w-4 h-4 text-slate-700" />
       </button>
 
       <!-- Page Numbers -->
       <template v-for="(p, idx) in visiblePages" :key="idx">
         <span
           v-if="p === '...'"
-          class="px-2 py-1 text-slate-400 font-bold"
+          class="px-2 py-1 text-slate-400 font-bold select-none"
         >
           ...
         </span>
@@ -135,11 +135,11 @@ const visiblePages = computed(() => {
           v-else
           type="button"
           @click="setPage(Number(p))"
-          class="min-w-7 h-7 px-2 rounded-lg text-xs font-bold font-mono transition cursor-pointer"
+          class="min-w-8 h-8 px-2 rounded-lg text-xs font-bold font-mono transition flex items-center justify-center cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600"
           :class="[
             p === currentPage
-              ? 'bg-indigo-600 text-white shadow-xs shadow-indigo-500/30'
-              : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
+              ? 'bg-indigo-600 text-white shadow-xs shadow-indigo-500/30 ring-1 ring-indigo-700'
+              : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900',
           ]"
         >
           {{ p }}
@@ -151,12 +151,11 @@ const visiblePages = computed(() => {
         type="button"
         @click="setPage(currentPage + 1)"
         :disabled="currentPage >= totalPages"
-        class="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer"
+        class="w-8 h-8 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed transition flex items-center justify-center cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600"
         title="Halaman Berikutnya"
+        aria-label="Halaman Berikutnya"
       >
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-        </svg>
+        <ChevronRight class="w-4 h-4 text-slate-700" />
       </button>
     </div>
   </div>

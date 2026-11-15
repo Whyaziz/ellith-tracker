@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
+import { ArrowLeft, ArrowRight } from 'lucide-vue-next';
 import { api, ApiError } from '../api/client';
 
 interface Batch {
@@ -497,9 +498,10 @@ onMounted(() => {
     <div>
       <RouterLink
         to="/printed-orders"
-        class="inline-flex items-center space-x-1.5 text-xs font-bold text-slate-600 hover:text-slate-900 transition cursor-pointer"
+        class="inline-flex items-center space-x-1.5 text-xs font-bold text-slate-600 hover:text-slate-900 transition cursor-pointer group"
       >
-        <span>&larr; Kembali ke Resi Tercetak</span>
+        <ArrowLeft class="w-4 h-4 text-slate-500 group-hover:-translate-x-0.5 transition-transform" />
+        <span>Kembali ke Resi Tercetak</span>
       </RouterLink>
 
       <div class="flex items-center space-x-2.5 mt-2">
@@ -665,9 +667,10 @@ onMounted(() => {
             v-if="lastUploadedBatch"
             type="button"
             @click="goToOrders(lastUploadedBatch.id)"
-            class="px-3.5 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 transition cursor-pointer"
+            class="px-3.5 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 transition cursor-pointer inline-flex items-center gap-1.5 shadow-xs"
           >
-            Buka Resi Tercetak &rarr;
+            <span>Buka Resi Tercetak</span>
+            <ArrowRight class="w-4 h-4" />
           </button>
         </div>
 
@@ -845,9 +848,10 @@ onMounted(() => {
           v-if="lastUploadedBatch"
           type="button"
           @click="goToOrders(lastUploadedBatch?.id)"
-          class="text-xs font-bold text-slate-900 hover:underline cursor-pointer"
+          class="text-xs font-bold text-slate-900 hover:text-indigo-600 cursor-pointer inline-flex items-center gap-1.5 transition-colors"
         >
-          Buka Resi Tercetak &rarr;
+          <span>Buka Resi Tercetak</span>
+          <ArrowRight class="w-3.5 h-3.5" />
         </button>
       </div>
 
@@ -1105,10 +1109,11 @@ onMounted(() => {
                   <button
                     type="button"
                     @click="goToOrders(b.id)"
-                    class="text-xs font-bold text-slate-800 hover:text-blue-600 cursor-pointer"
+                    class="text-xs font-bold text-slate-800 hover:text-indigo-600 cursor-pointer inline-flex items-center gap-1 transition-colors"
                     title="Buka pesanan batch ini"
                   >
-                    Buka &rarr;
+                    <span>Buka</span>
+                    <ArrowRight class="w-3.5 h-3.5" />
                   </button>
                   <span class="text-slate-300">|</span>
                   <button

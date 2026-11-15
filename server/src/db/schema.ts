@@ -93,6 +93,7 @@ export const order_items = sqliteTable(
   },
   (table) => [
     index('order_items_order_id_idx').on(table.order_id),
+    index('order_items_seller_sku_idx').on(table.seller_sku),
   ]
 );
 
@@ -299,3 +300,16 @@ export type Customer = typeof customers.$inferSelect;
 export type NewCustomer = typeof customers.$inferInsert;
 export type OfflineOrder = typeof offline_orders.$inferSelect;
 export type OfflineOrderItem = typeof offline_order_items.$inferSelect;
+
+// ----------------- PENGATURAN SISTEM (CUT-OFF STOK, DLL) -----------------
+export const system_settings = sqliteTable('system_settings', {
+  key: text('key').primaryKey(),
+  value: text('value').notNull(),
+  updated_at: text('updated_at')
+    .notNull()
+    .default(sql`(CURRENT_TIMESTAMP)`),
+});
+
+export type SystemSetting = typeof system_settings.$inferSelect;
+export type NewSystemSetting = typeof system_settings.$inferInsert;
+

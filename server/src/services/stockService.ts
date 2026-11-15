@@ -1,4 +1,4 @@
-import { eq, sql, desc } from 'drizzle-orm';
+import { eq, sql, desc, gte } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import {
   products,
@@ -10,6 +10,7 @@ import {
   order_items,
   offline_orders,
   offline_order_items,
+  system_settings,
 } from '../db/schema.js';
 import { findProductBySellerSku } from './productService.js';
 
@@ -448,10 +449,62 @@ export function findMasterProductForOrderItem<
   return null;
 }
 
-// ----------------- REKAPITULASI STOK PER SELLER SKU -----------------
+// ----------------- PENGATURAN CUT-OFF STOK (SALDO AWAL) -----------------
 
-export async function getStockOverview(filters?: { search?: string; categoryId?: number }) {
-  // Ambil semua master produk
+export async function getStockCutoffDate(): Promise<string | null> {
+  const [row] = await db
+    .select()
+    .from(system_settings)
+    .where(eq(system_settings.key, 'stock_cutoff_date'))
+    .limit(1);
+
+  return row?.value || null;
+}
+
+export async function setStockCutoffDate(dateIso: string | null): Promise<string | null> {
+  if (!dateIso || !dateIso.trim()) {
+    // Hapus tanggal cut-off -> sistem kembali menghitung dari awal waktu
+    await db.delete(system_settings).where(eq(system_settings.key, 'stock_cutoff_date'));
+    return null;
+  }
+
+  const cleanDate = dateIso.trim();
+  const parsed = new Date(cleanDate);
+  if (isNaN(parsed.getTime())) {
+    throw new Error('Format tanggal cut-off tidak valid');
+  }
+
+  const isoValue = parsed.toISOString();
+
+  await db
+    .insert(system_settings)
+    .values({
+      key: 'stock_cutoff_date',
+      value: isoValue,
+      updated_at: new Date().toISOString(),
+    })
+    .onConflictDoUpdate({
+      target: system_settings.key,
+      set: {
+        value: isoValue,
+        updated_at: new Date().toISOString(),
+      },
+    });
+
+  return isoValue;
+}
+
+// ----------------- REKAPITULASI STOK PER SELLER SKU (OPTIMIZED SINGLE-PASS HASH MAP) -----------------
+
+export async function getStockOverview(filters?: {
+  search?: string;
+  categoryId?: number;
+  cutoffDate?: string | null;
+}) {
+  const cutoffDate =
+    filters?.cutoffDate !== undefined ? filters.cutoffDate : await getStockCutoffDate();
+
+  // 1. Ambil semua master produk
   const allProducts = await db
     .select({
       id: products.id,
@@ -468,105 +521,218 @@ export async function getStockOverview(filters?: { search?: string; categoryId?:
     .from(products)
     .leftJoin(product_categories, eq(products.category_id, product_categories.id));
 
-  // Ambil seluruh batch stock in
-  const allBatchItems = await db.select().from(stock_batch_items);
-  // Ambil seluruh mutasi pengurangan
-  const allMutations = await db.select().from(stock_mutations);
+  // 2. Query data batch masuk (filter cutoff jika aktif)
+  const batchItemsQuery = db
+    .select({
+      id: stock_batch_items.id,
+      stock_batch_id: stock_batch_items.stock_batch_id,
+      product_id: stock_batch_items.product_id,
+      seller_sku: stock_batch_items.seller_sku,
+      qty: stock_batch_items.qty,
+      created_at: stock_batches.created_at,
+    })
+    .from(stock_batch_items)
+    .innerJoin(stock_batches, eq(stock_batch_items.stock_batch_id, stock_batches.id));
 
-  // Ambil seluruh online order items beserta status orders
-  const allOnlineItems = await db
+  const allBatchItems = cutoffDate
+    ? await batchItemsQuery.where(
+        sql`datetime(${stock_batches.created_at}) >= datetime(${cutoffDate})`
+      )
+    : await batchItemsQuery;
+
+  // 3. Query data mutasi pengurangan (filter cutoff jika aktif)
+  const mutationsQuery = db.select().from(stock_mutations);
+  const allMutations = cutoffDate
+    ? await mutationsQuery.where(
+        sql`datetime(${stock_mutations.created_at}) >= datetime(${cutoffDate})`
+      )
+    : await mutationsQuery;
+
+  // 4. Query data pesanan online TikTok / J&T (filter cutoff jika aktif)
+  const onlineItemsQuery = db
     .select({
       seller_sku: order_items.seller_sku,
       sku: order_items.sku,
+      product_name: order_items.product_name,
       qty: order_items.qty,
       status: orders.status,
+      created_at: orders.created_at,
     })
     .from(order_items)
     .innerJoin(orders, eq(order_items.order_id, orders.id));
 
-  // Ambil seluruh offline order items beserta status offline_orders
-  const allOfflineItems = await db
+  const allOnlineItems = cutoffDate
+    ? await onlineItemsQuery.where(
+        sql`datetime(${orders.created_at}) >= datetime(${cutoffDate})`
+      )
+    : await onlineItemsQuery;
+
+  // 5. Query data pesanan offline (filter cutoff jika aktif)
+  const offlineItemsQuery = db
     .select({
+      product_id: offline_order_items.product_id,
       seller_sku: offline_order_items.seller_sku,
       qty: offline_order_items.qty,
       status: offline_orders.status,
+      created_at: offline_orders.created_at,
+      order_date: offline_orders.order_date,
     })
     .from(offline_order_items)
     .innerJoin(offline_orders, eq(offline_order_items.offline_order_id, offline_orders.id));
 
+  const allOfflineItems = cutoffDate
+    ? await offlineItemsQuery.where(
+        sql`datetime(${offline_orders.created_at}) >= datetime(${cutoffDate})`
+      )
+    : await offlineItemsQuery;
+
+  // 6. Mapping O(1) cepat Seller SKU -> Product ID untuk exact match
+  const skuToProductId = new Map<string, number>();
+  for (const p of allProducts) {
+    const main = p.seller_sku.trim().toUpperCase();
+    skuToProductId.set(main, p.id);
+
+    if (p.sku_temp) {
+      const aliases = p.sku_temp
+        .split(',')
+        .map((s) => s.trim().toUpperCase())
+        .filter(Boolean);
+      for (const a of aliases) {
+        if (!skuToProductId.has(a)) {
+          skuToProductId.set(a, p.id);
+        }
+      }
+    }
+  }
+
+  // 7. Inisialisasi Akumulator O(P)
+  interface SkuAccumulator {
+    total_in: number;
+    total_mutation_out: number;
+    onlineUnpacked: number;
+    onlinePacked: number;
+    onlineShipped: number;
+    onlineCanceled: number;
+    offlineUnpacked: number;
+    offlinePacked: number;
+    offlineShipped: number;
+    offlineCanceled: number;
+  }
+
+  const accumulators = new Map<number, SkuAccumulator>();
+  for (const p of allProducts) {
+    accumulators.set(p.id, {
+      total_in: 0,
+      total_mutation_out: 0,
+      onlineUnpacked: 0,
+      onlinePacked: 0,
+      onlineShipped: 0,
+      onlineCanceled: 0,
+      offlineUnpacked: 0,
+      offlinePacked: 0,
+      offlineShipped: 0,
+      offlineCanceled: 0,
+    });
+  }
+
+  // Helper pencocokan ID produk (Strict Exact Match dengan fallback memoized untuk data lama)
+  function resolveProductId(
+    rawSku?: string | null,
+    rawSkuAlt?: string | null,
+    productName?: string | null
+  ): number | null {
+    if (rawSku) {
+      const k = rawSku.trim().toUpperCase();
+      const id = skuToProductId.get(k);
+      if (id) return id;
+    }
+    if (rawSkuAlt) {
+      const k = rawSkuAlt.trim().toUpperCase();
+      const id = skuToProductId.get(k);
+      if (id) return id;
+    }
+
+    // Fallback cerdas HANYA jika data order sangat lama belum ternormalisasi seller_sku-nya
+    const matched = findMasterProductForOrderItem(
+      { seller_sku: rawSku, sku: rawSkuAlt, product_name: productName },
+      allProducts
+    );
+    if (matched) {
+      if (rawSku) skuToProductId.set(rawSku.trim().toUpperCase(), matched.id);
+      if (rawSkuAlt) skuToProductId.set(rawSkuAlt.trim().toUpperCase(), matched.id);
+      return matched.id;
+    }
+    return null;
+  }
+
+  // 8. Single-Pass: Akumulasi Batch Masuk O(B)
+  for (const b of allBatchItems) {
+    const prodId = b.product_id || resolveProductId(b.seller_sku);
+    if (prodId && accumulators.has(prodId)) {
+      accumulators.get(prodId)!.total_in += b.qty;
+    }
+  }
+
+  // 9. Single-Pass: Akumulasi Mutasi Keluar O(M)
+  for (const m of allMutations) {
+    const prodId = m.product_id || resolveProductId(m.seller_sku);
+    if (prodId && accumulators.has(prodId)) {
+      accumulators.get(prodId)!.total_mutation_out += m.qty;
+    }
+  }
+
+  // 10. Single-Pass: Akumulasi Pesanan Online O(O)
+  for (const item of allOnlineItems) {
+    const prodId = resolveProductId(item.seller_sku, item.sku, item.product_name);
+    if (!prodId || !accumulators.has(prodId)) continue;
+
+    const acc = accumulators.get(prodId)!;
+    const st = item.status;
+    if (st === 'dibatalkan') {
+      acc.onlineCanceled += item.qty;
+    } else if (st === 'dikirim' || st === 'selesai' || st === 'selesai_kirim') {
+      acc.onlineShipped += item.qty;
+    } else if (st === 'dikemas' || st === 'siap_kirim') {
+      acc.onlinePacked += item.qty;
+    } else if (st === 'menunggu_dikemas' || st === 'belum_dikemas') {
+      acc.onlineUnpacked += item.qty;
+    }
+  }
+
+  // 11. Single-Pass: Akumulasi Pesanan Offline O(Off)
+  for (const item of allOfflineItems) {
+    const prodId = item.product_id || resolveProductId(item.seller_sku);
+    if (!prodId || !accumulators.has(prodId)) continue;
+
+    const acc = accumulators.get(prodId)!;
+    const st = item.status;
+    if (st === 'dibatalkan') {
+      acc.offlineCanceled += item.qty;
+    } else if (st === 'selesai' || st === 'selesai_kirim' || st === 'dikirim') {
+      acc.offlineShipped += item.qty;
+    } else if (st === 'dikemas' || st === 'siap_kirim') {
+      acc.offlinePacked += item.qty;
+    } else if (st === 'menunggu_dikemas' || st === 'belum_dikemas') {
+      acc.offlineUnpacked += item.qty;
+    }
+  }
+
+  // 12. Rekapitulasi Akhir O(P)
   const summaries: SkuStockSummary[] = allProducts.map((p) => {
-    function isMatch(itemSku: string | null | undefined): boolean {
-      return isSkuMatch(p, itemSku);
-    }
+    const acc = accumulators.get(p.id)!;
 
-    // 1. Total Masuk dari Stock Batches
-    const total_in = allBatchItems
-      .filter((b) => isMatch(b.seller_sku))
-      .reduce((sum, b) => sum + b.qty, 0);
+    const unpacked_qty = acc.onlineUnpacked + acc.offlineUnpacked;
+    const packed_qty = acc.onlinePacked + acc.offlinePacked;
+    const shipped_qty = acc.onlineShipped + acc.offlineShipped;
+    const canceled_qty = acc.onlineCanceled + acc.offlineCanceled;
 
-    // 2. Total Mutasi Keluar (rusak/hilang/koreksi)
-    const total_mutation_out = allMutations
-      .filter((m) => isMatch(m.seller_sku))
-      .reduce((sum, m) => sum + m.qty, 0);
+    const online_sold = acc.onlineUnpacked + acc.onlinePacked + acc.onlineShipped;
+    const offline_sold = acc.offlineUnpacked + acc.offlinePacked + acc.offlineShipped;
 
-    // 3. Online Orders Breakdown
-    let onlineUnpacked = 0;
-    let onlinePacked = 0;
-    let onlineShipped = 0;
-    let onlineCanceled = 0;
-
-    for (const item of allOnlineItems) {
-      if (isMatch(item.seller_sku) || isMatch(item.sku)) {
-        if (item.status === 'dibatalkan') {
-          onlineCanceled += item.qty;
-        } else if (item.status === 'dikirim' || item.status === 'selesai' || item.status === 'selesai_kirim') {
-          onlineShipped += item.qty;
-        } else if (item.status === 'dikemas' || item.status === 'siap_kirim') {
-          onlinePacked += item.qty;
-        } else if (item.status === 'menunggu_dikemas' || item.status === 'belum_dikemas') {
-          onlineUnpacked += item.qty;
-        }
-      }
-    }
-
-    // 4. Offline Orders Breakdown (termasuk status siap_kirim dan selesai_kirim dari offline order)
-    let offlineUnpacked = 0;
-    let offlinePacked = 0;
-    let offlineShipped = 0;
-    let offlineCanceled = 0;
-
-    for (const item of allOfflineItems) {
-      if (isMatch(item.seller_sku)) {
-        if (item.status === 'dibatalkan') {
-          offlineCanceled += item.qty;
-        } else if (item.status === 'selesai' || item.status === 'selesai_kirim' || item.status === 'dikirim') {
-          offlineShipped += item.qty;
-        } else if (item.status === 'dikemas' || item.status === 'siap_kirim') {
-          offlinePacked += item.qty;
-        } else if (item.status === 'menunggu_dikemas' || item.status === 'belum_dikemas') {
-          offlineUnpacked += item.qty;
-        }
-      }
-    }
-
-    const unpacked_qty = onlineUnpacked + offlineUnpacked;
-    const packed_qty = onlinePacked + offlinePacked;
-    const shipped_qty = onlineShipped + offlineShipped;
-    const canceled_qty = onlineCanceled + offlineCanceled;
-
-    const online_sold = onlineUnpacked + onlinePacked + onlineShipped;
-    const offline_sold = offlineUnpacked + offlinePacked + offlineShipped;
-
-    // Total terjual aktif (belum dikemas + siap kirim + selesai kirim)
     const total_sold = unpacked_qty + packed_qty + shipped_qty;
+    const available_stock = acc.total_in - acc.total_mutation_out - total_sold;
+    const physical_stock = acc.total_in - acc.total_mutation_out - shipped_qty;
 
-    // Stok Tersedia untuk dijual
-    const available_stock = total_in - total_mutation_out - total_sold;
-
-    // Stok Fisik di rak gudang (belum diserahkan ke kurir keluar)
-    const physical_stock = total_in - total_mutation_out - shipped_qty;
-
-    // Tentukan Health Status
     let health_status: 'stockout' | 'understock' | 'normal' | 'overstock' = 'normal';
     let health_action = 'Stok dalam batas aman dan ideal.';
 
@@ -590,8 +756,8 @@ export async function getStockOverview(filters?: { search?: string; categoryId?:
       label_color: p.label_color || '#4f46e5',
       min_stock: p.min_stock,
       max_stock: p.max_stock,
-      total_in,
-      total_mutation_out,
+      total_in: acc.total_in,
+      total_mutation_out: acc.total_mutation_out,
       unpacked_qty,
       packed_qty,
       shipped_qty,
@@ -609,7 +775,6 @@ export async function getStockOverview(filters?: { search?: string; categoryId?:
   // Filter jika ada search atau categoryId
   return summaries.filter((s) => {
     if (filters?.categoryId && s.category_name) {
-      // Filter category
       const p = allProducts.find((x) => x.id === s.product_id);
       if (p?.category_id !== filters.categoryId) return false;
     }

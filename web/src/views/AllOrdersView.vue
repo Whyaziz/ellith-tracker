@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
+import { ArrowRight } from 'lucide-vue-next';
 import { api, ApiError } from '../api/client';
 import DateRangePicker from '../components/DateRangePicker.vue';
 import Pagination from '../components/Pagination.vue';
@@ -846,21 +847,21 @@ onMounted(() => {
               >
                 <span
                   v-if="o.status === 'dibatalkan'"
-                  class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200"
+                  class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-50 text-rose-800 border border-rose-300"
                 >
-                  <span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+                  <span class="w-1.5 h-1.5 rounded-full bg-rose-600"></span>
                   Dibatalkan
                 </span>
                 <span
                   v-else-if="o.status === 'siap_kirim' || o.status === 'selesai_kirim'"
-                  class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200/80"
+                  class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-900 border border-emerald-300"
                 >
                   <span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
                   Dikemas
                 </span>
                 <span
                   v-else
-                  class="inline-flex items-center px-2 py-1 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200/60"
+                  class="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-900 border border-amber-300"
                 >
                   Menunggu
                 </span>
@@ -873,28 +874,28 @@ onMounted(() => {
               >
                 <span
                   v-if="o.status === 'dibatalkan'"
-                  class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200"
+                  class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-50 text-rose-800 border border-rose-300"
                 >
-                  <span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+                  <span class="w-1.5 h-1.5 rounded-full bg-rose-600"></span>
                   Batal
                 </span>
                 <span
                   v-else-if="o.status === 'selesai_kirim'"
-                  class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200"
+                  class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-indigo-50 text-indigo-900 border border-indigo-300"
                 >
                   <span class="w-1.5 h-1.5 rounded-full bg-indigo-600"></span>
                   Terkirim
                 </span>
                 <span
                   v-else-if="o.status === 'siap_kirim'"
-                  class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200"
+                  class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-50 text-blue-900 border border-blue-300"
                 >
                   <span class="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
                   Siap Kirim
                 </span>
                 <span
                   v-else
-                  class="inline-flex items-center px-2 py-1 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200"
+                  class="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-300"
                 >
                   Belum Kirim
                 </span>
@@ -1157,9 +1158,10 @@ onMounted(() => {
           <span class="text-xs text-slate-500">Pesanan ini dikelola pada menu Resi Tercetak.</span>
           <RouterLink
             :to="`/printed-orders?search=${selectedOrder.order_code}`"
-            class="text-xs font-bold text-slate-900 hover:underline cursor-pointer"
+            class="text-xs font-bold text-slate-900 hover:text-indigo-600 cursor-pointer inline-flex items-center gap-1.5 transition-colors"
           >
-            Buka di Resi Tercetak &rarr;
+            <span>Buka di Resi Tercetak</span>
+            <ArrowRight class="w-3.5 h-3.5" />
           </RouterLink>
         </div>
       </div>
@@ -1173,7 +1175,7 @@ onMounted(() => {
       aria-modal="true"
     >
       <div
-        class="bg-white rounded-3xl shadow-2xl max-w-2xl w-full overflow-hidden border border-slate-200 p-6 space-y-4"
+        class="bg-white rounded-3xl shadow-2xl max-w-2xl w-full max-h-[92vh] overflow-y-auto border border-slate-200 p-6 space-y-4"
       >
         <div class="flex items-center justify-between border-b border-slate-100 pb-3">
           <div class="flex items-center space-x-2">
@@ -1278,7 +1280,7 @@ onMounted(() => {
               </button>
             </div>
 
-            <div class="space-y-2 max-h-80 overflow-y-auto pr-1 pb-16">
+            <div class="space-y-2 max-h-80 overflow-y-auto pr-1 pb-2">
               <div
                 v-for="(row, idx) in offlineForm.items"
                 :key="idx"

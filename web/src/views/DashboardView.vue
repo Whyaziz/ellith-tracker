@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue';
+import { ArrowLeft } from 'lucide-vue-next';
 import Chart from 'chart.js/auto';
 import { api } from '../api/client';
 import DateRangePicker from '../components/DateRangePicker.vue';
@@ -810,9 +811,10 @@ onBeforeUnmount(() => {
                 v-if="selectedDrillCategory"
                 type="button"
                 @click="clearCategoryDrilldown"
-                class="px-2.5 py-1 text-[11px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition cursor-pointer shadow-2xs"
+                class="px-2.5 py-1 text-[11px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition cursor-pointer shadow-2xs inline-flex items-center gap-1.5"
               >
-                ← Semua Kategori
+                <ArrowLeft class="w-3.5 h-3.5 text-indigo-600" />
+                <span>Semua Kategori</span>
               </button>
               <span
                 v-else

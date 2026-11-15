@@ -8,6 +8,8 @@ import {
   getStockMutations,
   getStockOverview,
   adjustDirectStock,
+  getStockCutoffDate,
+  setStockCutoffDate,
 } from '../services/stockService.js';
 
 export const stockRouter = Router();
@@ -100,6 +102,33 @@ stockRouter.post('/adjust', requireAuth, async (req, res, next) => {
     });
 
     res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ----------------- PENGATURAN CUT-OFF STOK (SALDO AWAL GUDANG) -----------------
+
+stockRouter.get('/cutoff', requireAuth, async (_req, res, next) => {
+  try {
+    const cutoff_date = await getStockCutoffDate();
+    res.json({ cutoff_date });
+  } catch (err) {
+    next(err);
+  }
+});
+
+stockRouter.post('/cutoff', requireAuth, async (req, res, next) => {
+  try {
+    const { cutoff_date } = req.body;
+    const savedDate = await setStockCutoffDate(cutoff_date || null);
+    res.json({
+      success: true,
+      cutoff_date: savedDate,
+      message: savedDate
+        ? `Tanggal cut-off berhasil diatur ke ${new Date(savedDate).toLocaleString('id-ID')}. Pesanan sebelum tanggal ini tidak lagi memotong stok aktif.`
+        : 'Tanggal cut-off dinonaktifkan. Sistem kembali menghitung stok dari awal waktu.',
+    });
   } catch (err) {
     next(err);
   }

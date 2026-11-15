@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, watch } from 'vue';
 import { api, ApiError } from '../api/client';
 import Pagination from '../components/Pagination.vue';
+import { Calendar, Clock, AlertCircle, CheckCircle2 } from 'lucide-vue-next';
 
 interface StockItem {
   id: number;
@@ -74,6 +75,96 @@ const mutationForm = ref<{
 });
 const isSavingMutation = ref(false);
 const mutationError = ref('');
+
+// Cut-off Stok & Saldo Awal Opname
+const cutoffDate = ref<string | null>(null);
+const showCutoffModal = ref(false);
+const cutoffInputDate = ref('');
+const isSavingCutoff = ref(false);
+const cutoffError = ref('');
+
+async function fetchCutoff() {
+  try {
+    const res = await api.get<{ cutoff_date: string | null }>('/api/stock/cutoff');
+    cutoffDate.value = res.cutoff_date;
+  } catch (err) {
+    console.error('Gagal mengambil data cutoff:', err);
+  }
+}
+
+function openCutoffModal() {
+  cutoffError.value = '';
+  if (cutoffDate.value) {
+    const d = new Date(cutoffDate.value);
+    const tzOffset = d.getTimezoneOffset() * 60000;
+    cutoffInputDate.value = new Date(d.getTime() - tzOffset).toISOString().slice(0, 16);
+  } else {
+    const now = new Date();
+    const tzOffset = now.getTimezoneOffset() * 60000;
+    cutoffInputDate.value = new Date(now.getTime() - tzOffset).toISOString().slice(0, 16);
+  }
+  showCutoffModal.value = true;
+}
+
+function setCutoffToNow() {
+  const now = new Date();
+  const tzOffset = now.getTimezoneOffset() * 60000;
+  cutoffInputDate.value = new Date(now.getTime() - tzOffset).toISOString().slice(0, 16);
+}
+
+async function submitCutoff() {
+  if (!cutoffInputDate.value) {
+    cutoffError.value = 'Tentukan tanggal dan waktu cut-off terlebih dahulu';
+    return;
+  }
+  isSavingCutoff.value = true;
+  cutoffError.value = '';
+  try {
+    const isoString = new Date(cutoffInputDate.value).toISOString();
+    const res = await api.post<{ cutoff_date: string | null; message: string }>('/api/stock/cutoff', {
+      cutoff_date: isoString,
+    });
+    cutoffDate.value = res.cutoff_date;
+    showCutoffModal.value = false;
+    await Promise.all([fetchStock(), fetchBatches(), fetchMutations()]);
+  } catch (err: unknown) {
+    if (err instanceof ApiError) {
+      cutoffError.value = err.message;
+    } else {
+      cutoffError.value = 'Gagal menyimpan tanggal cut-off';
+    }
+  } finally {
+    isSavingCutoff.value = false;
+  }
+}
+
+async function disableCutoff() {
+  if (
+    !confirm(
+      'Apakah Anda yakin ingin menonaktifkan cut-off stok? Sistem akan kembali menghitung seluruh riwayat pesanan sejak awal.'
+    )
+  ) {
+    return;
+  }
+  isSavingCutoff.value = true;
+  cutoffError.value = '';
+  try {
+    const res = await api.post<{ cutoff_date: string | null; message: string }>('/api/stock/cutoff', {
+      cutoff_date: null,
+    });
+    cutoffDate.value = res.cutoff_date;
+    showCutoffModal.value = false;
+    await Promise.all([fetchStock(), fetchBatches(), fetchMutations()]);
+  } catch (err: unknown) {
+    if (err instanceof ApiError) {
+      cutoffError.value = err.message;
+    } else {
+      cutoffError.value = 'Gagal menonaktifkan tanggal cut-off';
+    }
+  } finally {
+    isSavingCutoff.value = false;
+  }
+}
 
 // Modal: Ubah Stok Fisik Langsung (Direct Stock Adjustment)
 const showAdjustModal = ref(false);
@@ -395,6 +486,7 @@ function getMutationLabel(type: string) {
 }
 
 onMounted(() => {
+  fetchCutoff();
   fetchStock();
   fetchBatches();
   fetchMutations();
@@ -424,15 +516,15 @@ onMounted(() => {
       </div>
 
       <!-- Action Buttons -->
-      <div class="flex items-center gap-2">
+      <div class="flex flex-wrap items-center gap-2">
         <!-- + Batch Stok Baru (Penambahan Stok) -->
         <button
           type="button"
           @click="openAddBatch"
-          class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-sm shadow-indigo-500/20 transition flex items-center space-x-1.5 cursor-pointer"
+          class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold shadow-xs transition flex items-center space-x-1.5 cursor-pointer"
         >
           <svg
-            class="w-4 h-4 text-emerald-300"
+            class="w-3.5 h-3.5 text-emerald-300"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -451,12 +543,22 @@ onMounted(() => {
         <button
           type="button"
           @click="openAddMutation()"
-          class="px-4 py-2 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs font-bold hover:bg-rose-100 transition shadow-sm flex items-center space-x-1.5 cursor-pointer"
+          class="px-3 py-1.5 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg text-xs font-semibold hover:bg-rose-100 transition shadow-2xs flex items-center space-x-1.5 cursor-pointer"
         >
-          <svg class="w-4 h-4 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg class="w-3.5 h-3.5 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M20 12H4" />
           </svg>
           <span>Catat Mutasi</span>
+        </button>
+
+        <!-- Atur Cut-Off Opname -->
+        <button
+          type="button"
+          @click="openCutoffModal"
+          class="px-3 py-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300 rounded-lg text-xs font-semibold transition shadow-2xs flex items-center space-x-1.5 cursor-pointer"
+        >
+          <Calendar class="w-3.5 h-3.5 text-indigo-600" />
+          <span>Cut-Off Opname</span>
         </button>
       </div>
     </div>
@@ -523,6 +625,44 @@ onMounted(() => {
         <div class="text-2xl font-extrabold text-slate-800 mt-1 font-mono tabular-nums">
           {{ summary.berlebihCount }} <span class="text-xs font-normal text-slate-500">SKU</span>
         </div>
+      </div>
+    </div>
+
+    <!-- Banner Status Cut-Off Opname (Hanya tampil ketika Cut-Off sedang aktif) -->
+    <div
+      v-if="cutoffDate"
+      class="bg-indigo-50/70 border border-indigo-200/80 rounded-2xl p-3.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-xs"
+    >
+      <div class="flex items-start sm:items-center gap-3">
+        <div
+          class="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-bold shrink-0 shadow-xs"
+        >
+          <Calendar class="w-3.5 h-3.5" />
+        </div>
+        <div>
+          <div class="font-bold text-indigo-950 flex items-center gap-2">
+            <span>Cut-Off Stok Aktif (Saldo Awal Opname)</span>
+            <span
+              class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300"
+            >
+              Tersinkron
+            </span>
+          </div>
+          <p class="text-indigo-800 text-[11px] mt-0.5 leading-relaxed">
+            Stok fisik aktif dihitung dari batch masuk &amp; pesanan per
+            <strong class="font-semibold text-indigo-950">{{ formatDate(cutoffDate) }}</strong> ke
+            atas. Riwayat pesanan sebelum waktu ini tetap tersimpan utuh di database namun tidak memotong stok fisik baru.
+          </p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 shrink-0 self-end sm:self-center">
+        <button
+          type="button"
+          @click="openCutoffModal"
+          class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg text-xs transition cursor-pointer shadow-xs"
+        >
+          Ubah Cut-Off
+        </button>
       </div>
     </div>
 
@@ -1381,6 +1521,125 @@ onMounted(() => {
               <span v-if="isSavingAdjust">Menyimpan...</span>
               <span v-else>Simpan Perubahan</span>
             </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Modal: Pengaturan Tanggal Cut-off Stok (Saldo Awal Opname) -->
+    <div
+      v-if="showCutoffModal"
+      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs"
+    >
+      <div
+        class="bg-white rounded-2xl shadow-xl w-full max-w-lg border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+      >
+        <!-- Modal Header -->
+        <div class="px-6 py-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+          <div class="flex items-center space-x-2.5">
+            <div
+              class="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold"
+            >
+              <Calendar class="w-4 h-4" />
+            </div>
+            <div>
+              <h3 class="text-sm font-bold text-slate-900">Cut-Off Stok & Saldo Awal Gudang</h3>
+              <p class="text-[11px] text-slate-500">Mencegah pesanan riil lampau memotong stok fisik baru</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            @click="showCutoffModal = false"
+            class="text-slate-400 hover:text-slate-600 transition p-1 text-lg font-bold cursor-pointer"
+          >
+            <span class="sr-only">Tutup</span>
+            &times;
+          </button>
+        </div>
+
+        <!-- Modal Body -->
+        <form @submit.prevent="submitCutoff" class="p-6 space-y-4">
+          <div
+            v-if="cutoffError"
+            class="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs font-semibold"
+          >
+            {{ cutoffError }}
+          </div>
+
+          <!-- Penjelasan Praktis & Aman -->
+          <div
+            class="p-3.5 bg-blue-50/70 border border-blue-200 rounded-xl text-blue-900 text-xs space-y-1.5 leading-relaxed"
+          >
+            <div class="font-bold flex items-center gap-1.5 text-blue-950">
+              <CheckCircle2 class="w-4 h-4 text-blue-600 shrink-0" />
+              <span>Data Riil Penjualan & Resi 100% Aman</span>
+            </div>
+            <p class="text-[11px] text-blue-800">
+              Mengatur tanggal cut-off <strong>TIDAK akan menghapus pesanan</strong> di database. Semua
+              histori resi J&T/TikTok, bukti scan barcode kurir, dan CRM pelanggan tetap utuh.
+            </p>
+            <p class="text-[11px] text-blue-800">
+              Sistem hanya akan mengabaikan pesanan yang dibuat <em>sebelum</em> tanggal ini agar tidak
+              memotong batch stok fisik yang Anda input saat opname.
+            </p>
+          </div>
+
+          <!-- Input Tanggal & Waktu Cut-Off -->
+          <div>
+            <div class="flex items-center justify-between mb-1.5">
+              <label class="block text-xs font-bold uppercase tracking-wider text-slate-700">
+                Titik Waktu Cut-Off *
+              </label>
+              <button
+                type="button"
+                @click="setCutoffToNow"
+                class="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 cursor-pointer transition flex items-center gap-1"
+              >
+                <Clock class="w-3.5 h-3.5" />
+                <span>Gunakan Waktu Sekarang</span>
+              </button>
+            </div>
+            <input
+              v-model="cutoffInputDate"
+              type="datetime-local"
+              required
+              class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-600 font-medium"
+            />
+            <p class="text-[10px] text-slate-500 mt-1">
+              Semua batch masuk dan pesanan baru yang dibuat mulai dari waktu ini akan dihitung sebagai stok aktif periode baru.
+            </p>
+          </div>
+
+          <!-- Tombol Aksi -->
+          <div class="flex items-center justify-between pt-3 border-t border-slate-100">
+            <div>
+              <button
+                v-if="cutoffDate"
+                type="button"
+                @click="disableCutoff"
+                :disabled="isSavingCutoff"
+                class="px-3 py-2 text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded-xl text-xs font-bold transition cursor-pointer"
+              >
+                Nonaktifkan Cut-Off
+              </button>
+            </div>
+            <div class="flex space-x-2">
+              <button
+                type="button"
+                @click="showCutoffModal = false"
+                class="px-4 py-2 border border-slate-200 text-slate-700 rounded-xl text-xs font-bold hover:bg-slate-50 transition cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="submit"
+                :disabled="isSavingCutoff"
+                class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold disabled:opacity-50 transition cursor-pointer flex items-center space-x-1.5"
+              >
+                <span v-if="isSavingCutoff">Menyimpan...</span>
+                <span v-else>Terapkan Cut-Off</span>
+              </button>
+            </div>
           </div>
         </form>
       </div>
