@@ -497,13 +497,13 @@ onMounted(() => {
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
     <!-- Header -->
     <div
-      class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-slate-200/80 pb-5"
+      class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 border-b border-slate-200/80 pb-5"
     >
-      <div>
+      <div class="min-w-0">
         <div class="flex items-center space-x-2.5">
           <h1 class="text-2xl font-bold text-slate-900 tracking-tight">Manajemen Stok Barang</h1>
           <span
-            class="text-[10px] font-bold tracking-widest uppercase bg-gradient-to-r from-indigo-600 to-indigo-700 text-white px-2.5 py-0.5 rounded shadow-xs"
+            class="text-[10px] font-bold tracking-widest uppercase bg-gradient-to-r from-indigo-600 to-indigo-700 text-white px-2.5 py-0.5 rounded shadow-xs shrink-0"
           >
             ELLITH
           </span>
@@ -515,50 +515,36 @@ onMounted(() => {
         </p>
       </div>
 
-      <!-- Action Buttons -->
-      <div class="flex flex-wrap items-center gap-2">
-        <!-- + Batch Stok Baru (Penambahan Stok) -->
+      <!-- Action Buttons (Selalu satu baris, tidak akan wrap) -->
+      <div class="flex items-center gap-1.5 sm:gap-2 shrink-0 flex-nowrap">
+        <!-- + Batch Stock -->
         <button
           type="button"
           @click="openAddBatch"
-          class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold shadow-xs transition flex items-center space-x-1.5 cursor-pointer"
+          class="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold shadow-xs transition flex items-center space-x-1 cursor-pointer whitespace-nowrap shrink-0"
         >
-          <svg
-            class="w-3.5 h-3.5 text-emerald-300"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2.5"
-              d="M12 4v16m8-8H4"
-            />
-          </svg>
-          <span>Batch Stok Baru</span>
+          <span class="font-bold text-emerald-300 text-sm leading-none">+</span>
+          <span>Batch Stock</span>
         </button>
 
-        <!-- + Catat Mutasi (Pengurangan) -->
+        <!-- - Mutasi -->
         <button
           type="button"
           @click="openAddMutation()"
-          class="px-3 py-1.5 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg text-xs font-semibold hover:bg-rose-100 transition shadow-2xs flex items-center space-x-1.5 cursor-pointer"
+          class="px-2.5 py-1.5 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg text-xs font-semibold hover:bg-rose-100 transition shadow-2xs flex items-center space-x-1 cursor-pointer whitespace-nowrap shrink-0"
         >
-          <svg class="w-3.5 h-3.5 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M20 12H4" />
-          </svg>
-          <span>Catat Mutasi</span>
+          <span class="font-bold text-rose-600 text-sm leading-none">-</span>
+          <span>Mutasi</span>
         </button>
 
-        <!-- Atur Cut-Off Opname -->
+        <!-- Cut-off -->
         <button
           type="button"
           @click="openCutoffModal"
-          class="px-3 py-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300 rounded-lg text-xs font-semibold transition shadow-2xs flex items-center space-x-1.5 cursor-pointer"
+          class="px-2.5 py-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300 rounded-lg text-xs font-semibold transition shadow-2xs flex items-center space-x-1.5 cursor-pointer whitespace-nowrap shrink-0"
         >
           <Calendar class="w-3.5 h-3.5 text-indigo-600" />
-          <span>Cut-Off Opname</span>
+          <span>Cut-off</span>
         </button>
       </div>
     </div>
