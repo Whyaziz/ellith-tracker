@@ -53,11 +53,13 @@ export const useAuthStore = defineStore('auth', () => {
   async function logout(): Promise<void> {
     loading.value = true;
     try {
-      await api.post('/api/auth/logout');
-    } catch {
-      // Ignored
-    } finally {
+      try {
+        await api.post('/api/auth/logout');
+      } catch (error) {
+        if (!(error instanceof ApiError && error.status === 401)) throw error;
+      }
       user.value = null;
+    } finally {
       loading.value = false;
     }
   }

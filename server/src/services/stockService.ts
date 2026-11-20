@@ -43,6 +43,7 @@ export interface CreateStockMutationInput {
 export interface DirectStockAdjustmentInput {
   seller_sku: string;
   target_stock: number;
+  expected_physical_stock?: number;
   notes?: string | null;
   userId: number;
 }
@@ -73,7 +74,7 @@ export interface SkuStockSummary {
 
 // ----------------- BATCH STOK MASUK (STOCK IN) -----------------
 
-export async function createStockBatch(input: CreateStockBatchInput) {
+export function createStockBatch(input: CreateStockBatchInput) {
   if (!input.items || input.items.length === 0) {
     throw new Error('Batch stok harus memiliki minimal 1 item barang');
   }
@@ -84,11 +85,11 @@ export async function createStockBatch(input: CreateStockBatchInput) {
   const batch_code = input.batch_code?.trim() || `STK-${today}-${randomSuffix}`;
 
   // Validasi kode unik
-  const [existing] = await db
+  const [existing] = db
     .select()
     .from(stock_batches)
     .where(eq(stock_batches.batch_code, batch_code))
-    .limit(1);
+    .limit(1).all();
 
   if (existing) {
     throw new Error(`Kode batch stok "${batch_code}" sudah pernah digunakan`);
@@ -101,11 +102,11 @@ export async function createStockBatch(input: CreateStockBatchInput) {
   for (const item of input.items) {
     const cleanSku = item.seller_sku.trim();
     if (!cleanSku) throw new Error('Seller SKU tidak boleh kosong');
-    if (typeof item.qty !== 'number' || item.qty <= 0) {
+    if (!Number.isSafeInteger(item.qty) || item.qty <= 0) {
       throw new Error(`Qty untuk Seller SKU "${cleanSku}" harus lebih besar dari 0`);
     }
 
-    const prod = await findProductBySellerSku(cleanSku);
+    const prod = findProductBySellerSku(cleanSku);
 
     // Ambil default master COGS jika tidak ditentukan secara custom per batch
     let cogsBu = item.cogs_bahan_utama ?? null;
@@ -117,11 +118,11 @@ export async function createStockBatch(input: CreateStockBatchInput) {
     let tiktokFee = item.tiktok_fee_percent ?? null;
 
     if (prod && cogsBu === null) {
-      const [masterCogs] = await db
+      const [masterCogs] = db
         .select()
         .from(product_cogs)
         .where(eq(product_cogs.product_id, prod.id))
-        .limit(1);
+        .limit(1).all();
       if (masterCogs) {
         cogsBu = masterCogs.bahan_utama;
         cogsAks = masterCogs.aksesori;
@@ -197,16 +198,16 @@ export async function getStockBatches() {
   return batchSummaries;
 }
 
-export async function getStockBatchById(id: number) {
-  const [batch] = await db
+export function getStockBatchById(id: number) {
+  const [batch] = db
     .select()
     .from(stock_batches)
     .where(eq(stock_batches.id, id))
-    .limit(1);
+    .limit(1).all();
 
   if (!batch) return null;
 
-  const items = await db
+  const items = db
     .select({
       id: stock_batch_items.id,
       product_id: stock_batch_items.product_id,
@@ -218,7 +219,7 @@ export async function getStockBatchById(id: number) {
     .from(stock_batch_items)
     .leftJoin(products, eq(stock_batch_items.product_id, products.id))
     .leftJoin(product_categories, eq(products.category_id, product_categories.id))
-    .where(eq(stock_batch_items.stock_batch_id, id));
+    .where(eq(stock_batch_items.stock_batch_id, id)).all();
 
   return {
     ...batch,
@@ -229,17 +230,17 @@ export async function getStockBatchById(id: number) {
 
 // ----------------- MUTASI STOK (PENGURANGAN / PENYESUAIAN) -----------------
 
-export async function createStockMutation(input: CreateStockMutationInput) {
+export function createStockMutation(input: CreateStockMutationInput) {
   const cleanSku = input.seller_sku.trim();
   if (!cleanSku) throw new Error('Seller SKU tidak boleh kosong');
-  if (typeof input.qty !== 'number' || input.qty <= 0) {
+  if (!Number.isSafeInteger(input.qty) || input.qty <= 0) {
     throw new Error('Kuantitas mutasi harus lebih besar dari 0');
   }
   const finalNotes = input.notes?.trim() || 'Mutasi penyesuaian stok';
 
-  const prod = await findProductBySellerSku(cleanSku);
+  const prod = findProductBySellerSku(cleanSku);
 
-  const [mutation] = await db
+  const [mutation] = db
     .insert(stock_mutations)
     .values({
       product_id: prod?.id ?? null,
@@ -249,7 +250,7 @@ export async function createStockMutation(input: CreateStockMutationInput) {
       notes: finalNotes,
       created_by: input.userId,
     })
-    .returning();
+    .returning().all();
 
   return mutation;
 }
@@ -259,78 +260,83 @@ export async function createStockMutation(input: CreateStockMutationInput) {
 export async function adjustDirectStock(input: DirectStockAdjustmentInput) {
   const cleanSku = input.seller_sku.trim();
   if (!cleanSku) throw new Error('Seller SKU tidak boleh kosong');
-  if (typeof input.target_stock !== 'number' || input.target_stock < 0) {
+  if (!Number.isSafeInteger(input.target_stock) || input.target_stock < 0) {
     throw new Error('Jumlah stok target harus berupa angka 0 atau lebih');
   }
 
-  const prod = await findProductBySellerSku(cleanSku);
-  if (!prod) {
-    throw new Error(`Produk dengan SKU "${cleanSku}" tidak ditemukan`);
-  }
+  return db.transaction(() => {
+    const prod = findProductBySellerSku(cleanSku);
+    if (!prod) {
+      throw new Error(`Produk dengan SKU "${cleanSku}" tidak ditemukan`);
+    }
 
-  // Hitung stok tersedia saat ini
-  const overview = await getStockOverview({ search: cleanSku });
-  const currentItem = overview.find(
-    (it) => it.seller_sku.toLowerCase() === cleanSku.toLowerCase()
-  );
-  const currentStock = currentItem ? currentItem.available_stock : 0;
-  const diff = input.target_stock - currentStock;
-  const customNotes = input.notes?.trim();
+    // Hitung stok tersedia saat ini
+    const overview = getStockOverview();
+    const currentItem = overview.find(
+      (it) => it.product_id === prod.id
+    );
+    const currentStock = currentItem ? currentItem.physical_stock : 0;
+    if (input.expected_physical_stock !== undefined && input.expected_physical_stock !== currentStock && currentStock !== input.target_stock) {
+      throw new Error('Stok fisik telah berubah. Muat ulang stok sebelum menyimpan opname.');
+    }
+    const diff = input.target_stock - currentStock;
+    const customNotes = input.notes?.trim();
 
-  if (diff > 0) {
-    // Stok bertambah -> Catat otomatis sebagai Batch Stok Masuk
-    const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const randomSuffix = Math.floor(1000 + Math.random() * 9000);
-    const batch_code = `ADJ-IN-${today}-${randomSuffix}`;
-    const autoNotes = customNotes || `Penyesuaian stok langsung (+${diff} pcs, dari ${currentStock} ke ${input.target_stock})`;
+    if (diff > 0) {
+      // Stok bertambah -> Catat otomatis sebagai Batch Stok Masuk
+      const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+      const batch_code = `ADJ-IN-${today}-${randomSuffix}`;
+      const autoNotes = customNotes || `Penyesuaian stok langsung (+${diff} pcs, dari ${currentStock} ke ${input.target_stock})`;
 
-    const batch = await createStockBatch({
-      batch_code,
-      notes: autoNotes,
-      items: [{ seller_sku: cleanSku, qty: diff }],
-      userId: input.userId,
-    });
+      const batch = createStockBatch({
+        batch_code,
+        notes: autoNotes,
+        items: [{ seller_sku: cleanSku, qty: diff }],
+        userId: input.userId,
+      });
 
-    const batchCode = batch?.batch_code || batch_code;
+      const batchCode = batch?.batch_code || batch_code;
 
-    return {
-      action: 'batch_in',
-      diff,
-      previous_stock: currentStock,
-      new_stock: input.target_stock,
-      batch_code: batchCode,
-      message: `Stok berhasil ditambah +${diff} pcs dan dicatat di Riwayat Batch Stok Masuk (${batchCode})`,
-    };
-  } else if (diff < 0) {
-    // Stok berkurang -> Catat otomatis sebagai Mutasi Stok Pengurangan
-    const reduction = Math.abs(diff);
-    const autoNotes = customNotes || `Penyesuaian stok langsung (-${reduction} pcs, dari ${currentStock} ke ${input.target_stock})`;
+      return {
+        action: 'batch_in',
+        diff,
+        previous_stock: currentStock,
+        new_stock: input.target_stock,
+        batch_code: batchCode,
+        message: `Stok berhasil ditambah +${diff} pcs dan dicatat di Riwayat Batch Stok Masuk (${batchCode})`,
+      };
+    } else if (diff < 0) {
+      // Stok berkurang -> Catat otomatis sebagai Mutasi Stok Pengurangan
+      const reduction = Math.abs(diff);
+      const autoNotes = customNotes || `Penyesuaian stok langsung (-${reduction} pcs, dari ${currentStock} ke ${input.target_stock})`;
 
-    const mutation = await createStockMutation({
-      seller_sku: cleanSku,
-      type: 'selisih_kurang',
-      qty: reduction,
-      notes: autoNotes,
-      userId: input.userId,
-    });
+      const mutation = createStockMutation({
+        seller_sku: cleanSku,
+        type: 'selisih_kurang',
+        qty: reduction,
+        notes: autoNotes,
+        userId: input.userId,
+      });
 
-    return {
-      action: 'mutation_out',
-      diff,
-      previous_stock: currentStock,
-      new_stock: input.target_stock,
-      mutation_id: mutation.id,
-      message: `Stok berhasil dikurangi -${reduction} pcs dan dicatat di Riwayat Mutasi Pengurangan`,
-    };
-  } else {
-    return {
-      action: 'no_change',
-      diff: 0,
-      previous_stock: currentStock,
-      new_stock: input.target_stock,
-      message: 'Jumlah stok tidak mengalami perubahan',
-    };
-  }
+      return {
+        action: 'mutation_out',
+        diff,
+        previous_stock: currentStock,
+        new_stock: input.target_stock,
+        mutation_id: mutation.id,
+        message: `Stok berhasil dikurangi -${reduction} pcs dan dicatat di Riwayat Mutasi Pengurangan`,
+      };
+    } else {
+      return {
+        action: 'no_change',
+        diff: 0,
+        previous_stock: currentStock,
+        new_stock: input.target_stock,
+        message: 'Jumlah stok tidak mengalami perubahan',
+      };
+    }
+  }, {behavior:'immediate'});
 }
 
 export async function getStockMutations() {
@@ -373,50 +379,9 @@ export function isSkuMatch(
   product: { seller_sku: string; sku_temp?: string | null },
   rawSku: string | null | undefined
 ): boolean {
-  if (!rawSku) return false;
-  const raw = rawSku.trim();
-  const lower = raw.toLowerCase();
-  const targetLower = product.seller_sku.toLowerCase();
-
-  // 1. Exact match (case-insensitive)
-  if (lower === targetLower) return true;
-
-  // 2. sku_temp alias exact / partial match
-  if (product.sku_temp) {
-    const aliases = product.sku_temp.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
-    if (aliases.includes(lower)) return true;
-    for (const a of aliases) {
-      if (a.length >= 4 && (lower.includes(a) || a.includes(lower))) return true;
-    }
-  }
-
-  // 3. Token match (split by whitespace/punctuation, e.g. "Hitam CLN-Hitam" -> "cln-hitam")
-  const tokens = raw.split(/[\s,()]+/).map((t) => t.trim().toLowerCase()).filter(Boolean);
-  if (tokens.includes(targetLower)) return true;
-
-  // 4. Normalized code match (PNC-TOP-ARMY vs PNC-ATS-Army, JKT-SET-NAVY vs JK-STL-Navy)
-  const normTarget = normalizeSkuCode(product.seller_sku);
-  const normRaw = normalizeSkuCode(raw);
-  if (normTarget && normRaw === normTarget) return true;
-
-  // 5. Token normalized match (token harus sama persis dengan normTarget atau token panjang memuat normTarget)
-  for (const token of tokens) {
-    const normToken = normalizeSkuCode(token);
-    if (normToken === normTarget) return true;
-    if (normTarget.length >= 6 && normToken.includes(normTarget)) return true;
-  }
-
-  // 6. Substring match jika target SKU cukup spesifik (>= 6 karakter)
-  if (targetLower.length >= 6 && lower.includes(targetLower)) return true;
-
-  // 7. Component words set match (e.g. ATS-PNC-Army vs PNC-ATS-Army)
-  const targetParts = targetLower.split(/[-_ ]+/).map((s) => s.replace(/top/g, 'ats').replace(/set/g, 'stl')).filter(Boolean);
-  const rawParts = lower.split(/[-_ ]+/).map((s) => s.replace(/top/g, 'ats').replace(/set/g, 'stl')).filter(Boolean);
-  if (targetParts.length >= 2 && targetParts.every((tp) => rawParts.includes(tp))) {
-    return true;
-  }
-
-  return false;
+  const code = rawSku?.trim().toLowerCase();
+  return !!code && (product.seller_sku.toLowerCase() === code ||
+    !!product.sku_temp?.split(',').some(alias=>alias.trim().toLowerCase()===code));
 }
 
 /**
@@ -429,88 +394,25 @@ export function findMasterProductForOrderItem<
   item: { product_name?: string | null; sku?: string | null; seller_sku?: string | null },
   productsList: T[]
 ): T | null {
-  // 1. Coba pencocokan langsung menggunakan isSkuMatch terhadap seller_sku & sku
-  for (const p of productsList) {
-    if (isSkuMatch(p, item.seller_sku) || isSkuMatch(p, item.sku)) {
-      return p;
-    }
+  for (const code of [item.seller_sku,item.sku]) {
+    if (!code?.trim()) continue;
+    const exact = productsList.find(p => p.seller_sku.toLowerCase()===code.trim().toLowerCase());
+    if (exact) return exact;
+    const matches = productsList.filter(p=>isSkuMatch(p,code));
+    if (matches.length === 1) return matches[0];
+    if (matches.length > 1) return null;
   }
-
-  // 2. Ekstraksi kode SKU dari string gabungan (contoh: "Hitam CLN-Hitam", "Cream PNC-ATS-Cream", "BIRU JK-Biru Muda MUDA")
-  const rawList = [item.seller_sku, item.sku].filter(Boolean) as string[];
-  for (const raw of rawList) {
-    const extracted = raw.match(/(CLN|PNC|JK|JKT|KL|KL2|ROK|GMS|JH|CL)[-_ ][A-Za-z0-9\-_ ]+/i);
-    if (extracted) {
-      let code = extracted[0].trim();
-      code = code.replace(/\s+(MUDA|ARMY|HITAM|NAVY|VIOLET|CREAM|MAROON|PINK|SAGE)$/i, '');
-      code = code.replace(/^KL2-[A-Za-z0-9]+-2C/i, (m) => m.replace(/-2C$/i, ''));
-      code = code.replace(/^JK-Biru Muda/i, 'JK-STL-Biru Laut');
-      code = code.replace(/^JK-Maroon/i, 'JK-STL-Maroon');
-      code = code.replace(/^JK-Navy/i, 'JKT-SET-Navy');
-      code = code.replace(/^JK-Violet/i, 'JK-STL-Violet');
-      for (const p of productsList) {
-        if (isSkuMatch(p, code)) {
-          return p;
-        }
-      }
-    }
-  }
-
-  // 3. Fallback cerdas menggunakan product_name jika teks SKU hanya berisi varian/warna (misal: "Cream" atau "Hitam")
-  if (item.product_name) {
-    const pName = item.product_name.toLowerCase();
-    const COLOR_SYNONYMS: Record<string, string> = {
-      mint: 'sage',
-      'hijau mint': 'sage',
-      'rose pink': 'pink',
-      lilac: 'violet',
-      'biru muda': 'biru laut',
-      ungu: 'violet',
-      krem: 'cream',
-    };
-
-    for (const raw of rawList) {
-      const color = raw.toLowerCase().trim();
-      const mappedColor = COLOR_SYNONYMS[color] || color;
-
-      const p = productsList.find((prod) => {
-        const prodName = prod.name.toLowerCase();
-        const prodSku = prod.seller_sku.toLowerCase();
-        const hasColor =
-          prodName.includes(color) ||
-          prodName.includes(mappedColor) ||
-          prodSku.includes(color) ||
-          prodSku.includes(mappedColor) ||
-          (prod.sku_temp &&
-            (prod.sku_temp.toLowerCase().includes(color) || prod.sku_temp.toLowerCase().includes(mappedColor)));
-
-        if (hasColor) {
-          if (pName.includes('celana') && (prodName.includes('celana') || prod.seller_sku.startsWith('CLN-'))) return true;
-          if (pName.includes('atasan') && (prodName.includes('atasan') || prod.seller_sku.includes('TOP') || prod.seller_sku.includes('ATS'))) return true;
-          if (pName.includes('setelan') && (prodName.includes('setelan') || prod.seller_sku.includes('SET') || prod.seller_sku.includes('STL'))) return true;
-          if (pName.includes('gamis') && (prodName.includes('gamis') || prod.seller_sku.startsWith('GMS-'))) return true;
-          if (pName.includes('rok') && (prodName.includes('rok') || prod.seller_sku.startsWith('ROK-'))) return true;
-          if (pName.includes('2 kepala') || pName.includes('2 in 1') || pName.includes('dua kepala')) {
-            if (prodName.includes('kepala 2') || prod.seller_sku.startsWith('KL2-') || prod.seller_sku.startsWith('KL-2')) return true;
-          }
-        }
-        return false;
-      });
-      if (p) return p;
-    }
-  }
-
   return null;
 }
 
 // ----------------- PENGATURAN CUT-OFF STOK (SALDO AWAL) -----------------
 
-export async function getStockCutoffDate(): Promise<string | null> {
-  const [row] = await db
+export function getStockCutoffDate(): string | null {
+  const [row] = db
     .select()
     .from(system_settings)
     .where(eq(system_settings.key, 'stock_cutoff_date'))
-    .limit(1);
+    .limit(1).all();
 
   return row?.value || null;
 }
@@ -541,16 +443,16 @@ export async function setStockCutoffDate(dateIso: string | null): Promise<string
 
 // ----------------- REKAPITULASI STOK PER SELLER SKU (OPTIMIZED SINGLE-PASS HASH MAP) -----------------
 
-export async function getStockOverview(filters?: {
+export function getStockOverview(filters?: {
   search?: string;
   categoryId?: number;
   cutoffDate?: string | null;
 }) {
   const cutoffDate =
-    filters?.cutoffDate !== undefined ? filters.cutoffDate : await getStockCutoffDate();
+    filters?.cutoffDate !== undefined ? filters.cutoffDate : getStockCutoffDate();
 
   // 1. Ambil semua master produk
-  const allProducts = await db
+  const allProducts = db
     .select({
       id: products.id,
       seller_sku: products.seller_sku,
@@ -564,7 +466,7 @@ export async function getStockOverview(filters?: {
       max_stock: products.max_stock,
     })
     .from(products)
-    .leftJoin(product_categories, eq(products.category_id, product_categories.id));
+    .leftJoin(product_categories, eq(products.category_id, product_categories.id)).all();
 
   // 2. Query data batch masuk (filter cutoff jika aktif)
   const batchItemsQuery = db
@@ -580,18 +482,18 @@ export async function getStockOverview(filters?: {
     .innerJoin(stock_batches, eq(stock_batch_items.stock_batch_id, stock_batches.id));
 
   const allBatchItems = cutoffDate
-    ? await batchItemsQuery.where(
+    ? batchItemsQuery.where(
         sql`datetime(${stock_batches.created_at}) >= datetime(${cutoffDate})`
-      )
-    : await batchItemsQuery;
+      ).all()
+    : batchItemsQuery.all();
 
   // 3. Query data mutasi pengurangan (filter cutoff jika aktif)
   const mutationsQuery = db.select().from(stock_mutations);
   const allMutations = cutoffDate
-    ? await mutationsQuery.where(
+    ? mutationsQuery.where(
         sql`datetime(${stock_mutations.created_at}) >= datetime(${cutoffDate})`
-      )
-    : await mutationsQuery;
+      ).all()
+    : mutationsQuery.all();
 
   // 4. Query data pesanan online TikTok / J&T (filter cutoff jika aktif)
   const onlineItemsQuery = db
@@ -607,10 +509,10 @@ export async function getStockOverview(filters?: {
     .innerJoin(orders, eq(order_items.order_id, orders.id));
 
   const allOnlineItems = cutoffDate
-    ? await onlineItemsQuery.where(
+    ? onlineItemsQuery.where(
         sql`datetime(${orders.created_at}) >= datetime(${cutoffDate})`
-      )
-    : await onlineItemsQuery;
+      ).all()
+    : onlineItemsQuery.all();
 
   // 5. Query data pesanan offline (filter cutoff jika aktif)
   const offlineItemsQuery = db
@@ -626,10 +528,10 @@ export async function getStockOverview(filters?: {
     .innerJoin(offline_orders, eq(offline_order_items.offline_order_id, offline_orders.id));
 
   const allOfflineItems = cutoffDate
-    ? await offlineItemsQuery.where(
+    ? offlineItemsQuery.where(
         sql`datetime(${offline_orders.created_at}) >= datetime(${cutoffDate})`
-      )
-    : await offlineItemsQuery;
+      ).all()
+    : offlineItemsQuery.all();
 
   // 6. Mapping O(1) cepat Seller SKU -> Product ID untuk exact match
   const skuToProductId = new Map<string, number>();
@@ -643,12 +545,12 @@ export async function getStockOverview(filters?: {
         .map((s) => s.trim().toUpperCase())
         .filter(Boolean);
       for (const a of aliases) {
-        if (!skuToProductId.has(a)) {
-          skuToProductId.set(a, p.id);
-        }
+        skuToProductId.set(a, skuToProductId.has(a) && skuToProductId.get(a) !== p.id ? 0 : p.id);
       }
     }
   }
+
+  for (const p of allProducts) skuToProductId.set(p.seller_sku.toUpperCase(),p.id);
 
   // 7. Inisialisasi Akumulator O(P)
   interface SkuAccumulator {
@@ -680,32 +582,11 @@ export async function getStockOverview(filters?: {
     });
   }
 
-  // Helper pencocokan ID produk (Strict Exact Match dengan fallback memoized untuk data lama)
-  function resolveProductId(
-    rawSku?: string | null,
-    rawSkuAlt?: string | null,
-    productName?: string | null
-  ): number | null {
-    if (rawSku) {
-      const k = rawSku.trim().toUpperCase();
-      const id = skuToProductId.get(k);
-      if (id) return id;
-    }
-    if (rawSkuAlt) {
-      const k = rawSkuAlt.trim().toUpperCase();
-      const id = skuToProductId.get(k);
-      if (id) return id;
-    }
-
-    // Fallback cerdas HANYA jika data order sangat lama belum ternormalisasi seller_sku-nya
-    const matched = findMasterProductForOrderItem(
-      { seller_sku: rawSku, sku: rawSkuAlt, product_name: productName },
-      allProducts
-    );
-    if (matched) {
-      if (rawSku) skuToProductId.set(rawSku.trim().toUpperCase(), matched.id);
-      if (rawSkuAlt) skuToProductId.set(rawSkuAlt.trim().toUpperCase(), matched.id);
-      return matched.id;
+  function resolveProductId(...codes: (string | null | undefined)[]) {
+    for (const code of codes) {
+      if (!code) continue;
+      const match = skuToProductId.get(code.trim().toUpperCase());
+      if (match !== undefined) return match || null;
     }
     return null;
   }
@@ -728,7 +609,7 @@ export async function getStockOverview(filters?: {
 
   // 10. Single-Pass: Akumulasi Pesanan Online O(O)
   for (const item of allOnlineItems) {
-    const prodId = resolveProductId(item.seller_sku, item.sku, item.product_name);
+    const prodId = resolveProductId(item.seller_sku, item.sku);
     if (!prodId || !accumulators.has(prodId)) continue;
 
     const acc = accumulators.get(prodId)!;

@@ -1,5 +1,5 @@
 import { eq, or, like, sql, desc, asc } from 'drizzle-orm';
-import { db } from '../db/client.js';
+import { db, sqlite } from '../db/client.js';
 import { product_categories, products } from '../db/schema.js';
 
 export function detectProductColor(text: string): string {
@@ -186,32 +186,22 @@ export async function getProductById(id: number) {
 /**
  * Mencari produk berdasarkan Seller SKU atau Alias (sku_temp)
  */
-export async function findProductBySellerSku(skuToMatch: string) {
-  const clean = skuToMatch.trim();
-  if (!clean) return null;
-
-  // 1. Cek exact match seller_sku
-  const [exact] = await db
-    .select()
-    .from(products)
-    .where(eq(sql`lower(${products.seller_sku})`, clean.toLowerCase()))
-    .limit(1);
-
+export function findProductBySellerSku(raw: string) {
+  const code = raw.trim().toLowerCase();
+  if (!code) return null;
+  const exact = db.select().from(products).where(eq(sql`lower(${products.seller_sku})`, code)).get();
   if (exact) return exact;
+  const candidates = db.select().from(products).where(like(sql`lower(${products.sku_temp})`, `%${code}%`)).all()
+    .filter(p => p.sku_temp?.split(',').some(alias => alias.trim().toLowerCase() === code));
+  if (candidates.length > 1) throw new Error(`Alias "${raw}" ambigu. Pilih SKU utama produk.`);
+  return candidates[0] ?? null;
+}
 
-  // 2. Cek match sku_temp (bisa exact atau comma-separated)
-  const [tempMatch] = await db
-    .select()
-    .from(products)
-    .where(
-      or(
-        eq(sql`lower(${products.sku_temp})`, clean.toLowerCase()),
-        like(sql`lower(${products.sku_temp})`, `%${clean.toLowerCase()}%`)
-      )
-    )
-    .limit(1);
-
-  return tempMatch || null;
+function checkSkuOwnership(sku: string, aliases?: string | null, owner?: number) {
+  for (const code of [sku,...(aliases ?? '').split(',')].map(s=>s.trim()).filter(Boolean)) {
+    const match = findProductBySellerSku(code);
+    if (match && match.id !== owner) throw new Error(`SKU atau alias "${code}" telah digunakan produk lain.`);
+  }
 }
 
 export async function createProduct(input: CreateProductInput) {
@@ -231,7 +221,8 @@ export async function createProduct(input: CreateProductInput) {
     throw new Error(`Produk dengan Seller SKU "${seller_sku}" sudah terdaftar`);
   }
 
-  const [created] = await db
+  checkSkuOwnership(seller_sku,input.sku_temp);
+  const [created] = db
     .insert(products)
     .values({
       seller_sku,
@@ -245,7 +236,7 @@ export async function createProduct(input: CreateProductInput) {
       min_stock: input.min_stock ?? 10,
       max_stock: input.max_stock ?? 100,
     })
-    .returning();
+    .returning().all();
 
   return await getProductById(created.id);
 }
@@ -304,7 +295,21 @@ export async function updateProduct(id: number, input: UpdateProductInput) {
   }
 
   if (Object.keys(updateFields).length > 0) {
-    await db.update(products).set(updateFields).where(eq(products.id, id));
+    db.transaction(tx => {
+      const newSku = updateFields.seller_sku;
+      if (newSku && newSku !== current.seller_sku) {
+        const aliases = (updateFields.sku_temp ?? current.sku_temp ?? '').split(',').map(a=>a.trim()).filter(Boolean);
+        updateFields.sku_temp = [...new Set([...aliases,current.seller_sku])].join(', ');
+        // Keep lot references, historical snapshots and future cutoff replays on the same product.
+        for (const table of ['stock_batch_items','stock_mutations','offline_order_items']) {
+          sqlite.prepare(`UPDATE ${table} SET seller_sku=? WHERE product_id=? OR (product_id IS NULL AND seller_sku=? COLLATE NOCASE)`).run(newSku,id,current.seller_sku);
+        }
+        sqlite.prepare('UPDATE order_items SET seller_sku=? WHERE seller_sku=? COLLATE NOCASE').run(newSku,current.seller_sku);
+        sqlite.prepare('UPDATE inventory_issues SET sku=? WHERE sku=? COLLATE NOCASE').run(newSku,current.seller_sku);
+      }
+      checkSkuOwnership(newSku ?? current.seller_sku, updateFields.sku_temp, id);
+      tx.update(products).set(updateFields).where(eq(products.id,id)).run();
+    }, {behavior:'immediate'});
   }
 
   return await getProductById(id);
@@ -330,14 +335,11 @@ export async function mapSkuTemp(productId: number, aliasSku: string) {
   const [prod] = await db.select().from(products).where(eq(products.id, productId)).limit(1);
   if (!prod) throw new Error(`Produk dengan ID #${productId} tidak ditemukan`);
 
-  let newSkuTemp = cleanAlias;
-  if (prod.sku_temp) {
-    const existingAliases = prod.sku_temp.split(',').map((s) => s.trim());
-    if (!existingAliases.includes(cleanAlias)) {
-      newSkuTemp = `${prod.sku_temp}, ${cleanAlias}`;
-    }
+  checkSkuOwnership(prod.seller_sku,cleanAlias,productId);
+  const aliases = (prod.sku_temp ?? '').split(',').map(s=>s.trim()).filter(Boolean);
+  if (!aliases.some(a=>a.toLowerCase()===cleanAlias.toLowerCase())) {
+    aliases.push(cleanAlias);
+    db.update(products).set({ sku_temp: aliases.join(', ') }).where(eq(products.id,productId)).run();
   }
-
-  await db.update(products).set({ sku_temp: newSkuTemp }).where(eq(products.id, productId));
   return await getProductById(productId);
 }

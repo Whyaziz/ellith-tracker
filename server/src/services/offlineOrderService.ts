@@ -1,4 +1,4 @@
-import { eq, or, like, sql, desc, inArray } from 'drizzle-orm';
+import { and, eq, or, like, sql, desc, inArray } from 'drizzle-orm';
 import { db, sqlite } from '../db/client.js';
 import { offline_orders, offline_order_items, products, customers } from '../db/schema.js';
 import { findProductBySellerSku } from './productService.js';
@@ -59,6 +59,15 @@ async function prepareItems(items: CreateOfflineOrderItemInput[]) {
   return rows;
 }
 
+function resolveCustomer(name: string, phone?: string | null, id?: number | null) {
+  const nameMatches = eq(sql`lower(trim(${customers.name}))`,name.trim().toLowerCase());
+  const phoneMatches = phone?.trim() ? eq(sql`trim(${customers.phone})`,phone.trim()) : undefined;
+  const matches = db.select({id:customers.id}).from(customers)
+    .where(and(nameMatches, phoneMatches, id != null ? eq(customers.id,id) : undefined)).limit(2).all();
+  if (id != null && !matches.length) throw new Error('Identitas pembeli berbeda dari profil pelanggan yang dipilih.');
+  return matches.length === 1 ? matches[0].id : null;
+}
+
 export async function createOfflineOrder(input: CreateOfflineOrderInput) {
   if (!input.customer_name || !input.customer_name.trim()) {
     throw new Error('Nama pelanggan wajib diisi');
@@ -82,18 +91,7 @@ export async function createOfflineOrder(input: CreateOfflineOrderInput) {
     throw new Error(`Nomor pesanan "${order_no}" sudah digunakan`);
   }
 
-  // Cari customer_id jika tidak disuplai secara eksplisit tapi ada customer dengan nama yang cocok
-  let customerId = input.customer_id ?? null;
-  if (!customerId) {
-    const matches = await db
-      .select()
-      .from(customers)
-      .where(eq(sql`lower(${customers.name})`, input.customer_name.trim().toLowerCase()))
-      .limit(2);
-    if (matches.length === 1 && (!input.customer_phone || matches[0].phone === input.customer_phone.trim())) {
-      customerId = matches[0].id;
-    }
-  }
+  const customerId = resolveCustomer(input.customer_name,input.customer_phone,input.customer_id);
 
   const rows = await prepareItems(input.items);
 
@@ -235,6 +233,20 @@ function shrinkOfflineIssue(itemId: number, original: number, keep: number, unit
   sqlite.prepare('UPDATE offline_order_items SET cogs_unit_fifo=? WHERE id=?').run((value+needed*fallback)/keep,itemId);
 }
 
+export function updateOfflinePrices(orderId: number, changes: {id:number; previous:number; price:number}[]) {
+  return db.transaction(tx => {
+    for (const change of changes) {
+      const updated = tx.update(offline_order_items).set({ price: change.price }).where(and(
+        eq(offline_order_items.offline_order_id, orderId), eq(offline_order_items.id, change.id),
+        sql`coalesce(${offline_order_items.price},0) = ${change.previous}`
+      )).run();
+      if (updated.changes !== 1) {
+        throw new Error('Rincian nota telah berubah. Muat ulang pesanan sebelum mengedit harga.');
+      }
+    }
+  });
+}
+
 export async function updateOfflineOrder(id: number, input: UpdateOfflineOrderInput) {
   const [current] = await db
     .select()
@@ -262,6 +274,10 @@ export async function updateOfflineOrder(id: number, input: UpdateOfflineOrderIn
   if (input.items?.length === 0) throw new Error('Pesanan wajib memiliki barang');
   const rows = input.items ? await prepareItems(input.items) : undefined;
   db.transaction((tx) => {
+    if (input.customer_id !== undefined || input.customer_name !== undefined || input.customer_phone !== undefined) {
+      updateFields.customer_id = resolveCustomer(updateFields.customer_name ?? current.customer_name,
+        input.customer_phone !== undefined ? input.customer_phone : current.customer_phone,input.customer_id);
+    }
     if (Object.keys(updateFields).length) tx.update(offline_orders).set(updateFields).where(eq(offline_orders.id, id)).run();
     if (!rows) return;
     const existing = tx.select().from(offline_order_items).where(eq(offline_order_items.offline_order_id, id)).all();
@@ -288,18 +304,20 @@ export async function updateOfflineOrder(id: number, input: UpdateOfflineOrderIn
 }
 
 export async function deleteOfflineOrder(id: number) {
-  const [order] = await db
+  return db.transaction(tx => {
+  const [order] = tx
     .select()
     .from(offline_orders)
     .where(eq(offline_orders.id, id))
-    .limit(1);
+    .limit(1).all();
 
   if (!order) {
     throw new Error(`Pesanan offline ID #${id} tidak ditemukan`);
   }
 
-  await db.delete(offline_order_items).where(eq(offline_order_items.offline_order_id, id));
-  await db.delete(offline_orders).where(eq(offline_orders.id, id));
+  tx.delete(offline_order_items).where(eq(offline_order_items.offline_order_id, id)).run();
+  tx.delete(offline_orders).where(eq(offline_orders.id, id)).run();
 
   return { success: true, deletedOrderNo: order.order_no };
+  }, {behavior:'immediate'});
 }

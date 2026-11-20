@@ -1213,7 +1213,7 @@ onUnmounted(() => {
       </div>
 
       <p class="text-xs text-slate-600 leading-relaxed">
-        Tindakan ini akan menghapus seluruh data baris riwayat scan barcode dari database agar tampilan tabel kembali kosong dan bersih. Status paket yang sudah dikemas/dikirim tetap tersimpan aman pada data pesanan.
+        Tabel dan penghitung riwayat akan dimulai kembali. Bukti scan tetap tersimpan. Untuk membatalkan scan terakhir, buka detail resi di Resi Tercetak.
       </p>
 
       <form @submit.prevent="submitClearLogs" class="space-y-4">
@@ -1248,7 +1248,7 @@ onUnmounted(() => {
             :disabled="isClearingLogs || !clearPassword.trim()"
             class="px-5 py-2 text-xs font-bold bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white rounded-xl transition shadow-md shadow-rose-600/20 flex items-center space-x-1.5 cursor-pointer disabled:opacity-50"
           >
-            <span v-if="isClearingLogs">Menghapus...</span>
+            <span v-if="isClearingLogs">Membersihkan...</span>
             <span v-else>Konfirmasi &amp; Bersihkan</span>
           </button>
         </div>

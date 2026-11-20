@@ -96,7 +96,8 @@ stockRouter.post('/adjust', requireAuth, async (req, res, next) => {
 
     const result = await adjustDirectStock({
       seller_sku,
-      target_stock: Number(target_stock),
+      target_stock,
+      expected_physical_stock: req.body.expected_physical_stock,
       notes,
       userId,
     });

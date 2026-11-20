@@ -36,3 +36,24 @@ Startup pertama memasang tabel alokasi dan merekonstruksi pemakaian kloter dari 
 
 Migrasi diuji dua kali pada salinan sementara basis data lokal. SQLite melaporkan integritas baik, 418 baris pengeluaran, dan nol selisih antara saldo kloter dan penerimaan dikurangi alokasi. Dari 418 baris tersebut, 142 belum sepenuhnya tertutup kloter. Angka ini mencakup berbagai sumber pengeluaran dan bukan jumlah nota atau jumlah unit. Rekonsiliasi penerimaan lama, waktu transaksi, dan pemetaan SKU diperlukan sebelum memakai hasil historis sebagai angka final.
 Verifikasi regresi lanjutan mencakup 50 tes pada tujuh berkas, termasuk penjualan lintas kloter, edit nota, perbandingan kanal, opname, dan impor ulang paket yang sudah dikemas.
+Pada detail nota offline, tombol Edit harga jual memungkinkan kasir mengubah harga per baris dan melihat total sebelum menyimpan. Pembaruan hanya menulis kolom harga dan mendeteksi konflik jika harga sudah berubah sejak nota dibuka.
+
+## Perbaikan alur operasional lintas modul
+
+| Alur | Perubahan dan hasil yang diharapkan |
+|---|---|
+| Opname | Target dibandingkan dengan stok fisik per ID produk di dalam satu transaksi tulis. Dialog menampilkan reservasi dan stok tersedia. Koreksi dengan saldo awal kedaluwarsa ditolak jika stok belum mencapai target. Stok masuk, mutasi, dan target opname memakai unit pcs bulat. |
+| SKU | Pencocokan memakai kode utama atau alias utuh. Penggantian SKU mempertahankan ID produk, menambahkan kode lama sebagai alias dan menyelaraskan referensi kode di kloter, nota, resi, mutasi serta alokasi untuk pemrosesan ulang cut-off. Alias yang berbenturan ditolak ketika disimpan. |
+| Batch dan penghapusan | Jumlah resi mengikuti penambahan, pemindahan, dan penghapusan anggota melalui trigger SQLite. Migrasi menyelaraskan header lama. Penghapusan nota, resi, atau batch menjalankan seluruh penulisan database dalam satu transaksi. Penghapusan PDF berlangsung setelah transaksi berhasil dan memeriksa referensi dari batch lain. |
+| Pelanggan dan status | Pemilihan pelanggan mengganti nomor telepon, termasuk jika kosong. Edit manual melepaskan pilihan profil. Pencocokan nota memakai nama, nomor yang tersedia, dan keunikan profil. CRM tetap menampilkan pembatalan dalam riwayat dan mengecualikannya dari total barang serta belanja. Daftar pesanan mengenali nama status offline lama maupun baru. |
+| Resi dan scan | Metadata paket yang sudah diproses dapat dikoreksi. Rincian barang terkunci. Pembersihan tampilan scan menyimpan batas riwayat yang ditampilkan. Operator dapat menggunakan Batalkan scan terakhir dari detail resi selama bukti scan tersedia. |
+| Tanggal dan ekspor | Daftar resi dan CSV memakai tanggal kirim, atau tanggal pembuatan dalam WIB jika tanggal kirim tidak tersedia. Pemilihan filter memulai permintaan baru; data lama langsung dilepas. Kegagalan menampilkan tindakan muat ulang. Respons lama tidak dapat menimpa permintaan terbaru. |
+| Sesi dan HPP | Logout gagal mempertahankan status pengguna dan menampilkan pemberitahuan. Sesi yang sudah kedaluwarsa dapat ditutup dari UI. Saran harga mengambil harga target master HPP. Untuk nota susulan, tanggal nota menentukan periode penjualan dan waktu pencatatan menentukan modal; formulir menyampaikan aturan ini sebelum penyimpanan. |
+
+### Hasil verifikasi
+
+- 55 tes pada delapan berkas lulus. Regresi lintas modul mencakup dua permintaan opname, saldo fisik dengan reservasi, penggantian dan pencocokan SKU, rollback penghapusan, CRM, keanggotaan batch, rekonsiliasi header, dan satu tanggal acuan laporan.
+- Tes scan memastikan undo tetap berhasil setelah tampilan riwayat dibersihkan. Bukti scan yang sudah dihapus secara permanen oleh versi lama tidak dapat dipulihkan oleh fitur ini.
+- Pemeriksaan tipe server dan build frontend lulus. ESLint melaporkan nol galat dan tujuh peringatan.
+- Uji Edge headless pada bundle frontend dengan API sintetis mencakup pergantian batch, kegagalan jaringan, percobaan ulang, respons terlambat, dan logout gagal. Jalankan setelah build dengan perintah `node scripts/test-export-browser.mjs`. Lokasi browser bisa ditetapkan melalui `BROWSER_EXECUTABLE`.
+- Migrasi dijalankan dua kali pada salinan database lokal. Salinan itu sudah memiliki nol selisih header saat pemeriksaan dimulai dan hasilnya tetap nol. Pemulihan header yang sengaja dibuat salah diuji terpisah pada database sintetis.

@@ -9,8 +9,12 @@ const router = useRouter();
 const user = computed(() => authStore.user);
 
 async function handleLogout() {
-  await authStore.logout();
-  router.push('/login');
+  try {
+    await authStore.logout();
+    await router.push('/login');
+  } catch {
+    alert('Sesi belum berhasil diakhiri. Periksa koneksi dan coba keluar lagi.');
+  }
 }
 </script>
 

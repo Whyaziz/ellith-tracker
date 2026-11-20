@@ -7,6 +7,7 @@ import Pagination from '../components/Pagination.vue';
 import SearchSelect from '../components/SearchSelect.vue';
 
 interface UnifiedOrderItem {
+  id?: number;
   seller_sku: string;
   sku?: string;
   product_name: string;
@@ -142,9 +143,9 @@ async function loadData() {
         0
       );
       let normalizedStatus: 'belum_dikemas' | 'siap_kirim' | 'selesai_kirim' | 'dibatalkan' = 'siap_kirim';
-      if (off.status === 'belum_dikemas') normalizedStatus = 'belum_dikemas';
+      if (['menunggu_dikemas','belum_dikemas'].includes(off.status)) normalizedStatus = 'belum_dikemas';
       else if (off.status === 'siap_kirim') normalizedStatus = 'siap_kirim';
-      else if (off.status === 'selesai_kirim' || off.status === 'selesai') normalizedStatus = 'selesai_kirim';
+      else if (['dikirim','selesai_kirim','selesai'].includes(off.status)) normalizedStatus = 'selesai_kirim';
       else if (off.status === 'dibatalkan') normalizedStatus = 'dibatalkan';
 
       list.push({
@@ -163,6 +164,7 @@ async function loadData() {
         notes: off.notes,
         raw_offline_id: off.id,
         items: (off.items || []).map((it: any) => ({
+          id: it.id,
           seller_sku: it.seller_sku,
           sku: '-',
           product_name: it.product_name,
@@ -313,7 +315,7 @@ function onCustomerSelected(customerId: number | '') {
   if (cust) {
     offlineForm.value.customer_id = cust.id;
     offlineForm.value.customer_name = cust.name;
-    if (cust.phone) offlineForm.value.customer_phone = cust.phone;
+    offlineForm.value.customer_phone = cust.phone ?? '';
   }
 }
 
@@ -393,7 +395,44 @@ async function submitOfflineOrder() {
 }
 
 // Detail & Status Changing
+const draftPrices = ref<(number | string)[] | null>(null);
+const priceError = ref('');
+const savingPrices = ref(false);
+
+async function savePrices() {
+  const order = selectedOrder.value;
+  const draft = draftPrices.value;
+  if (!order?.raw_offline_id || !draft || savingPrices.value) return;
+  if (draft.some(value => typeof value !== 'number' || !Number.isFinite(value) || value < 0)) {
+    priceError.value = 'Isi setiap harga jual dengan angka nol atau lebih.';
+    return;
+  }
+  const changes = order.items.flatMap((item, i) => {
+    const price = Number(draft[i]);
+    const previous = item.price ?? 0;
+    return price === previous ? [] : [{ id: item.id, price, previous }];
+  });
+  savingPrices.value = true;
+  priceError.value = '';
+  try {
+    if (changes.length) await api.put(`/api/offline-orders/${order.raw_offline_id}/prices`, { changes });
+    order.items.forEach((item, i) => { item.price = Number(draft[i]); });
+    order.total_amount = order.items.reduce((sum, item) => sum + item.qty * (item.price ?? 0), 0);
+    draftPrices.value = null;
+    await loadData();
+    if (selectedOrder.value?.id === order.id) {
+      selectedOrder.value = unifiedOrders.value.find(row => row.id === order.id) ?? order;
+    }
+  } catch (err) {
+    priceError.value = err instanceof Error ? err.message : 'Gagal menyimpan harga jual.';
+  } finally {
+    savingPrices.value = false;
+  }
+}
+
 function openDetail(o: UnifiedOrder) {
+  draftPrices.value = null;
+  priceError.value = '';
   selectedOrder.value = o;
   showDetailModal.value = true;
 }
@@ -1047,7 +1086,7 @@ onMounted(() => {
           </div>
           <button
             type="button"
-            @click="showDetailModal = false"
+            @click="showDetailModal = false" :disabled="savingPrices"
             class="text-slate-400 hover:text-slate-600 p-1 rounded-lg cursor-pointer"
           >
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1105,12 +1144,32 @@ onMounted(() => {
                 >
                   {{ it.qty }} pcs
                 </div>
-                <div v-if="it.price" class="text-[10px] text-slate-500">
-                  @ {{ formatCurrency(it.price) }}
+                <label v-if="draftPrices" class="block text-xs text-slate-600">
+                  Harga jual per unit (Rp)
+                  <input v-model.number="draftPrices[i]" type="number" min="0" step="any" :disabled="savingPrices"
+                    class="block w-32 rounded-lg border border-slate-300 px-2 py-1 text-right" />
+                </label>
+                <div v-else-if="selectedOrder.type === 'offline' || it.price" class="text-[10px] text-slate-500">
+                  @ {{ formatCurrency(it.price ?? 0) }}
                 </div>
               </div>
             </div>
           </div>
+        </div>
+
+        <div v-if="selectedOrder.type === 'offline'" class="space-y-2 text-sm">
+          <div class="flex items-center justify-between">
+            <strong>Total {{ formatCurrency(selectedOrder.items.reduce((sum, item, i) => sum + item.qty * Number(draftPrices?.[i] ?? item.price ?? 0), 0)) }}</strong>
+            <button v-if="!draftPrices" type="button" class="font-semibold text-indigo-700"
+              @click="priceError = ''; draftPrices = selectedOrder.items.map(item => item.price ?? 0)">Edit harga jual</button>
+            <div v-else class="flex gap-4">
+              <button type="button" :disabled="savingPrices" @click="draftPrices = null; priceError = ''">Batal</button>
+              <button type="button" :disabled="savingPrices" class="font-semibold text-indigo-700" @click="savePrices">
+                {{ savingPrices ? 'Menyimpan?' : 'Simpan harga' }}
+              </button>
+            </div>
+          </div>
+          <p v-if="priceError" role="alert" class="text-rose-700">{{ priceError }}</p>
         </div>
 
         <!-- Status Management (For Offline Orders) -->
@@ -1252,7 +1311,7 @@ onMounted(() => {
                 >Nama Pelanggan <span class="text-rose-600">*</span></label
               >
               <input
-                v-model="offlineForm.customer_name"
+                v-model="offlineForm.customer_name" @input="offlineForm.customer_id = null"
                 type="text"
                 required
                 placeholder="cth: Ibu Hj. Nurma"
@@ -1264,7 +1323,7 @@ onMounted(() => {
                 >No. HP / WhatsApp</label
               >
               <input
-                v-model="offlineForm.customer_phone"
+                v-model="offlineForm.customer_phone" @input="offlineForm.customer_id = null"
                 type="text"
                 placeholder="cth: 08123456789"
                 class="mt-1 block w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900"
@@ -1280,6 +1339,7 @@ onMounted(() => {
                 required
                 class="mt-1 block w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900"
               />
+              <small>HPP dicatat saat nota disimpan, termasuk untuk penjualan bertanggal lampau.</small>
             </div>
           </div>
 

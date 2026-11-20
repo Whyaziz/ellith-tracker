@@ -12,7 +12,8 @@
     "seed:admin": "tsx src/scripts/seedAdmin.ts",
     "seed:simulation": "tsx src/scripts/seedSimulation.ts",
     "db:normalize-sku": "tsx src/scripts/normalizeExistingOrderItems.ts",
-    "db:backup": "tsx src/scripts/backupDatabase.ts"
+    "db:backup": "tsx src/scripts/backupDatabase.ts",
+    "db:reset-stock-cogs": "tsx src/scripts/resetStockAndCogs.ts"
   },
   "dependencies": {
     "bcryptjs": "^3.0.2",

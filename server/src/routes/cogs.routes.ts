@@ -1,3 +1,6 @@
+import { db } from '../db/client.js';
+import { product_cogs } from '../db/schema.js';
+import { eq } from 'drizzle-orm';
 import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.js';
 import {
@@ -56,18 +59,17 @@ cogsRouter.get('/fifo-hint/:sku', requireAuth, async (req, res, next) => {
   try {
     const sku = req.params.sku;
     if (typeof sku !== 'string' || !sku.trim()) return res.status(400).json({ message: 'SKU tidak valid' });
-    const [fifoCost, maCost, prod] = await Promise.all([
-      getFifoCostForSku(sku),
-      getMovingAverageCostForSku(sku),
-      findProductBySellerSku(sku),
-    ]);
+    const prod = await findProductBySellerSku(sku);
+    const canonical = prod?.seller_sku ?? sku;
+    const [fifoCost, maCost] = await Promise.all([getFifoCostForSku(canonical),getMovingAverageCostForSku(canonical)]);
+    const master = prod && db.select().from(product_cogs).where(eq(product_cogs.product_id,prod.id)).get();
     res.json({
       success: true,
       data: {
         seller_sku: sku,
         fifo_cogs: fifoCost,
         moving_average_cogs: maCost,
-        suggested_target_price: prod?.min_stock, // or target price
+        suggested_target_price: master?.target_price || null,
       },
     });
   } catch (err) {

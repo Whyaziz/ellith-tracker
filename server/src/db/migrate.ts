@@ -186,193 +186,214 @@ export function runMigrations() {
     console.warn('[db:migrate] Note on creating product_cogs table:', err);
   }
 
-  // Seed default product_cogs for products that don't have one yet
+  // Seed default product_cogs for products that don't have one yet (one-time initialization)
   try {
-    const productsWithoutCogs = sqlite.prepare(`
-      SELECT p.id, p.seller_sku, p.name
-      FROM products p
-      LEFT JOIN product_cogs c ON p.id = c.product_id
-      WHERE c.id IS NULL
-    `).all() as Array<{ id: number; seller_sku: string; name: string }>;
+    const isBaselineSeeded = sqlite
+      .prepare("SELECT value FROM system_settings WHERE key = 'cogs_baseline_seeded'")
+      .get() as { value: string } | undefined;
 
-    if (productsWithoutCogs.length > 0) {
-      console.log(`[db:migrate] Seeding default COGS for ${productsWithoutCogs.length} products...`);
-      const insertCogs = sqlite.prepare(`
-        INSERT INTO product_cogs (
-          product_id, bahan_utama, aksesori, kemasan, tenaga_kerja, overhead, target_price, tiktok_fee_percent, target_margin_percent, notes
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 40, ?)
-      `);
+    if (!isBaselineSeeded) {
+      const productsWithoutCogs = sqlite.prepare(`
+        SELECT p.id, p.seller_sku, p.name
+        FROM products p
+        LEFT JOIN product_cogs c ON p.id = c.product_id
+        WHERE c.id IS NULL
+      `).all() as Array<{ id: number; seller_sku: string; name: string }>;
 
-      for (const p of productsWithoutCogs) {
-        const s = `${p.seller_sku} ${p.name}`.toLowerCase();
-        let bu = 15000;
-        let aks = 3000;
-        let kem = 2734;
-        let tk = 3600;
-        let ovh = 3520;
-        let targetPrice = 50000;
-        let tiktokFee = 25;
-        let note = 'Baseline standar';
+      if (productsWithoutCogs.length > 0) {
+        console.log(`[db:migrate] Seeding default COGS for ${productsWithoutCogs.length} products...`);
+        const insertCogs = sqlite.prepare(`
+          INSERT INTO product_cogs (
+            product_id, bahan_utama, aksesori, kemasan, tenaga_kerja, overhead, target_price, tiktok_fee_percent, target_margin_percent, notes
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 40, ?)
+        `);
 
-        if (s.includes('2 in 1') || s.includes('kl2-set') || s.includes('setelan ponco 2')) {
-          // PC2-C Setelan Ponco K2
-          bu = 42350;
-          aks = 4454;
-          kem = 2734;
-          tk = 5370;
-          ovh = 7520;
-          targetPrice = 109900;
-          tiktokFee = 30;
-          note = 'Baseline Setelan Ponco K2 (PC2-C)';
-        } else if (s.includes('kl2') || s.includes('ponco 2') || s.includes('ponco kepala 2')) {
-          // PC2 Atasan Ponco K2
-          bu = 28010;
-          aks = 4454;
-          kem = 2734;
-          tk = 3600;
-          ovh = 3520;
-          targetPrice = 69000;
-          tiktokFee = 25;
-          note = 'Baseline Atasan Ponco K2 (PC2)';
-        } else if (s.includes('pnc-set') || s.includes('setelan ponco')) {
-          // PC1-C Setelan Ponco K1
-          bu = 35840;
-          aks = 4454;
-          kem = 2734;
-          tk = 3600;
-          ovh = 3520;
-          targetPrice = 79900;
-          tiktokFee = 25;
-          note = 'Baseline Setelan Ponco K1 (PC1-C)';
-        } else if (s.includes('pnc') || s.includes('ponco')) {
-          // PC1 Atasan Ponco K1
-          bu = 21500;
-          aks = 4454;
-          kem = 2734;
-          tk = 3600;
-          ovh = 3520;
-          targetPrice = 54900;
-          tiktokFee = 25;
-          note = 'Baseline Atasan Ponco K1 (PC1)';
-        } else if (s.includes('jkt-set') || s.includes('setelan jaket')) {
-          // JKT-C Stelan Jaket
-          bu = 25740;
-          aks = 4446;
-          kem = 2734;
-          tk = 3600;
-          ovh = 3520;
-          targetPrice = 59900;
-          tiktokFee = 25;
-          note = 'Baseline Stelan Jaket (JKT-C)';
-        } else if (s.includes('jkt') || s.includes('jaket')) {
-          // JKT Atasan Jaket
-          bu = 15600;
-          aks = 4446;
-          kem = 2734;
-          tk = 3600;
-          ovh = 3520;
-          targetPrice = 49900;
-          tiktokFee = 30;
-          note = 'Baseline Atasan Jaket (JKT)';
-        } else if (s.includes('gms') || s.includes('gamis')) {
-          // GMS Gamis
-          bu = 39028;
-          aks = 4454;
-          kem = 2734;
-          tk = 3600;
-          ovh = 3520;
-          targetPrice = 115000;
-          tiktokFee = 25;
-          note = 'Baseline Gamis (GMS)';
-        } else if (s.includes('cln') || s.includes('celana')) {
-          // CLN Celana
-          bu = 7370;
-          aks = 0;
-          kem = 0;
-          tk = 3450;
-          ovh = 3520;
-          targetPrice = 27000;
-          tiktokFee = 25;
-          note = 'Baseline Celana (CLN)';
-        } else if (s.includes('rok')) {
-          // ROK Rok
-          bu = 12000;
-          aks = 2000;
-          kem = 2500;
-          tk = 3500;
-          ovh = 3500;
-          targetPrice = 45000;
-          tiktokFee = 25;
-          note = 'Baseline Rok';
+        for (const p of productsWithoutCogs) {
+          const s = `${p.seller_sku} ${p.name}`.toLowerCase();
+          let bu = 15000;
+          let aks = 3000;
+          let kem = 2734;
+          let tk = 3600;
+          let ovh = 3520;
+          let targetPrice = 50000;
+          let tiktokFee = 25;
+          let note = 'Baseline standar';
+
+          if (s.includes('2 in 1') || s.includes('kl2-set') || s.includes('setelan ponco 2')) {
+            // PC2-C Setelan Ponco K2
+            bu = 42350;
+            aks = 4454;
+            kem = 2734;
+            tk = 5370;
+            ovh = 7520;
+            targetPrice = 109900;
+            tiktokFee = 30;
+            note = 'Baseline Setelan Ponco K2 (PC2-C)';
+          } else if (s.includes('kl2') || s.includes('ponco 2') || s.includes('ponco kepala 2')) {
+            // PC2 Atasan Ponco K2
+            bu = 28010;
+            aks = 4454;
+            kem = 2734;
+            tk = 3600;
+            ovh = 3520;
+            targetPrice = 69000;
+            tiktokFee = 25;
+            note = 'Baseline Atasan Ponco K2 (PC2)';
+          } else if (s.includes('pnc-set') || s.includes('setelan ponco')) {
+            // PC1-C Setelan Ponco K1
+            bu = 35840;
+            aks = 4454;
+            kem = 2734;
+            tk = 3600;
+            ovh = 3520;
+            targetPrice = 79900;
+            tiktokFee = 25;
+            note = 'Baseline Setelan Ponco K1 (PC1-C)';
+          } else if (s.includes('pnc') || s.includes('ponco')) {
+            // PC1 Atasan Ponco K1
+            bu = 21500;
+            aks = 4454;
+            kem = 2734;
+            tk = 3600;
+            ovh = 3520;
+            targetPrice = 54900;
+            tiktokFee = 25;
+            note = 'Baseline Atasan Ponco K1 (PC1)';
+          } else if (s.includes('jkt-set') || s.includes('setelan jaket')) {
+            // JKT-C Stelan Jaket
+            bu = 25740;
+            aks = 4446;
+            kem = 2734;
+            tk = 3600;
+            ovh = 3520;
+            targetPrice = 59900;
+            tiktokFee = 25;
+            note = 'Baseline Stelan Jaket (JKT-C)';
+          } else if (s.includes('jkt') || s.includes('jaket')) {
+            // JKT Atasan Jaket
+            bu = 15600;
+            aks = 4446;
+            kem = 2734;
+            tk = 3600;
+            ovh = 3520;
+            targetPrice = 49900;
+            tiktokFee = 30;
+            note = 'Baseline Atasan Jaket (JKT)';
+          } else if (s.includes('gms') || s.includes('gamis')) {
+            // GMS Gamis
+            bu = 39028;
+            aks = 4454;
+            kem = 2734;
+            tk = 3600;
+            ovh = 3520;
+            targetPrice = 115000;
+            tiktokFee = 25;
+            note = 'Baseline Gamis (GMS)';
+          } else if (s.includes('cln') || s.includes('celana')) {
+            // CLN Celana
+            bu = 7370;
+            aks = 0;
+            kem = 0;
+            tk = 3450;
+            ovh = 3520;
+            targetPrice = 27000;
+            tiktokFee = 25;
+            note = 'Baseline Celana (CLN)';
+          } else if (s.includes('rok')) {
+            // ROK Rok
+            bu = 12000;
+            aks = 2000;
+            kem = 2500;
+            tk = 3500;
+            ovh = 3500;
+            targetPrice = 45000;
+            tiktokFee = 25;
+            note = 'Baseline Rok';
+          }
+
+          insertCogs.run(p.id, bu, aks, kem, tk, ovh, targetPrice, tiktokFee, note);
         }
-
-        insertCogs.run(p.id, bu, aks, kem, tk, ovh, targetPrice, tiktokFee, note);
+        console.log(`[db:migrate] Successfully seeded COGS for ${productsWithoutCogs.length} products.`);
       }
-      console.log(`[db:migrate] Successfully seeded COGS for ${productsWithoutCogs.length} products.`);
+
+      // Backfill missing COGS on stock_batch_items from product_cogs
+      try {
+        // 1. Update from product_id match
+        sqlite.prepare(`
+          UPDATE stock_batch_items
+          SET
+            cogs_bahan_utama = (SELECT c.bahan_utama FROM product_cogs c WHERE c.product_id = stock_batch_items.product_id),
+            cogs_aksesori = (SELECT c.aksesori FROM product_cogs c WHERE c.product_id = stock_batch_items.product_id),
+            cogs_kemasan = (SELECT c.kemasan FROM product_cogs c WHERE c.product_id = stock_batch_items.product_id),
+            cogs_tenaga_kerja = (SELECT c.tenaga_kerja FROM product_cogs c WHERE c.product_id = stock_batch_items.product_id),
+            cogs_overhead = (SELECT c.overhead FROM product_cogs c WHERE c.product_id = stock_batch_items.product_id),
+            cogs_total = (SELECT (c.bahan_utama + c.aksesori + c.kemasan + c.tenaga_kerja + c.overhead) FROM product_cogs c WHERE c.product_id = stock_batch_items.product_id),
+            target_price = (SELECT c.target_price FROM product_cogs c WHERE c.product_id = stock_batch_items.product_id),
+            tiktok_fee_percent = (SELECT c.tiktok_fee_percent FROM product_cogs c WHERE c.product_id = stock_batch_items.product_id)
+          WHERE product_id IS NOT NULL AND cogs_total IS NULL
+        `).run();
+
+        // 2. Fallback by normalized seller_sku match
+        sqlite.prepare(`
+          UPDATE stock_batch_items
+          SET
+            cogs_bahan_utama = (SELECT c.bahan_utama FROM product_cogs c JOIN products p ON c.product_id = p.id WHERE REPLACE(LOWER(p.seller_sku), ' ', '-') = REPLACE(LOWER(stock_batch_items.seller_sku), ' ', '-') LIMIT 1),
+            cogs_aksesori = (SELECT c.aksesori FROM product_cogs c JOIN products p ON c.product_id = p.id WHERE REPLACE(LOWER(p.seller_sku), ' ', '-') = REPLACE(LOWER(stock_batch_items.seller_sku), ' ', '-') LIMIT 1),
+            cogs_kemasan = (SELECT c.kemasan FROM product_cogs c JOIN products p ON c.product_id = p.id WHERE REPLACE(LOWER(p.seller_sku), ' ', '-') = REPLACE(LOWER(stock_batch_items.seller_sku), ' ', '-') LIMIT 1),
+            cogs_tenaga_kerja = (SELECT c.tenaga_kerja FROM product_cogs c JOIN products p ON c.product_id = p.id WHERE REPLACE(LOWER(p.seller_sku), ' ', '-') = REPLACE(LOWER(stock_batch_items.seller_sku), ' ', '-') LIMIT 1),
+            cogs_overhead = (SELECT c.overhead FROM product_cogs c JOIN products p ON c.product_id = p.id WHERE REPLACE(LOWER(p.seller_sku), ' ', '-') = REPLACE(LOWER(stock_batch_items.seller_sku), ' ', '-') LIMIT 1),
+            cogs_total = (SELECT (c.bahan_utama + c.aksesori + c.kemasan + c.tenaga_kerja + c.overhead) FROM product_cogs c JOIN products p ON c.product_id = p.id WHERE REPLACE(LOWER(p.seller_sku), ' ', '-') = REPLACE(LOWER(stock_batch_items.seller_sku), ' ', '-') LIMIT 1),
+            target_price = (SELECT c.target_price FROM product_cogs c JOIN products p ON c.product_id = p.id WHERE REPLACE(LOWER(p.seller_sku), ' ', '-') = REPLACE(LOWER(stock_batch_items.seller_sku), ' ', '-') LIMIT 1),
+            tiktok_fee_percent = (SELECT c.tiktok_fee_percent FROM product_cogs c JOIN products p ON c.product_id = p.id WHERE REPLACE(LOWER(p.seller_sku), ' ', '-') = REPLACE(LOWER(stock_batch_items.seller_sku), ' ', '-') LIMIT 1)
+          WHERE cogs_total IS NULL
+        `).run();
+
+        // 3. Fallback for component parts (JKT-BW, JKT-TOP, PNC-BW)
+        sqlite.prepare(`
+          UPDATE stock_batch_items
+          SET
+            cogs_bahan_utama = 7370, cogs_aksesori = 0, cogs_kemasan = 0, cogs_tenaga_kerja = 3450, cogs_overhead = 3520, cogs_total = 14340, target_price = 27000, tiktok_fee_percent = 25
+          WHERE cogs_total IS NULL AND (seller_sku LIKE 'JKT-BW%' OR seller_sku LIKE 'CLN%')
+        `).run();
+
+        sqlite.prepare(`
+          UPDATE stock_batch_items
+          SET
+            cogs_bahan_utama = 15600, cogs_aksesori = 4446, cogs_kemasan = 2734, cogs_tenaga_kerja = 3600, cogs_overhead = 3520, cogs_total = 29900, target_price = 49900, tiktok_fee_percent = 30
+          WHERE cogs_total IS NULL AND (seller_sku LIKE 'JKT-TOP%' OR seller_sku LIKE 'JKT%')
+        `).run();
+
+        sqlite.prepare(`
+          UPDATE stock_batch_items
+          SET
+            cogs_bahan_utama = 12000, cogs_aksesori = 2000, cogs_kemasan = 2500, cogs_tenaga_kerja = 3500, cogs_overhead = 3500, cogs_total = 23500, target_price = 45000, tiktok_fee_percent = 25
+          WHERE cogs_total IS NULL AND (seller_sku LIKE 'PNC-BW%' OR seller_sku LIKE 'ROK%')
+        `).run();
+
+        console.log('[db:migrate] Backfilled COGS for all stock_batch_items.');
+      } catch (err) {
+        console.warn('[db:migrate] Note on backfilling batch items COGS:', err);
+      }
+
+      sqlite.prepare("INSERT INTO system_settings (key, value) VALUES ('cogs_baseline_seeded', '1') ON CONFLICT(key) DO UPDATE SET value='1'").run();
     }
   } catch (err) {
     console.warn('[db:migrate] Note on seeding product_cogs:', err);
   }
 
-  // Backfill missing COGS on stock_batch_items from product_cogs
-  try {
-    // 1. Update from product_id match
-    sqlite.prepare(`
-      UPDATE stock_batch_items
-      SET
-        cogs_bahan_utama = (SELECT c.bahan_utama FROM product_cogs c WHERE c.product_id = stock_batch_items.product_id),
-        cogs_aksesori = (SELECT c.aksesori FROM product_cogs c WHERE c.product_id = stock_batch_items.product_id),
-        cogs_kemasan = (SELECT c.kemasan FROM product_cogs c WHERE c.product_id = stock_batch_items.product_id),
-        cogs_tenaga_kerja = (SELECT c.tenaga_kerja FROM product_cogs c WHERE c.product_id = stock_batch_items.product_id),
-        cogs_overhead = (SELECT c.overhead FROM product_cogs c WHERE c.product_id = stock_batch_items.product_id),
-        cogs_total = (SELECT (c.bahan_utama + c.aksesori + c.kemasan + c.tenaga_kerja + c.overhead) FROM product_cogs c WHERE c.product_id = stock_batch_items.product_id),
-        target_price = (SELECT c.target_price FROM product_cogs c WHERE c.product_id = stock_batch_items.product_id),
-        tiktok_fee_percent = (SELECT c.tiktok_fee_percent FROM product_cogs c WHERE c.product_id = stock_batch_items.product_id)
-      WHERE product_id IS NOT NULL AND cogs_total IS NULL
-    `).run();
-
-    // 2. Fallback by normalized seller_sku match
-    sqlite.prepare(`
-      UPDATE stock_batch_items
-      SET
-        cogs_bahan_utama = (SELECT c.bahan_utama FROM product_cogs c JOIN products p ON c.product_id = p.id WHERE REPLACE(LOWER(p.seller_sku), ' ', '-') = REPLACE(LOWER(stock_batch_items.seller_sku), ' ', '-') LIMIT 1),
-        cogs_aksesori = (SELECT c.aksesori FROM product_cogs c JOIN products p ON c.product_id = p.id WHERE REPLACE(LOWER(p.seller_sku), ' ', '-') = REPLACE(LOWER(stock_batch_items.seller_sku), ' ', '-') LIMIT 1),
-        cogs_kemasan = (SELECT c.kemasan FROM product_cogs c JOIN products p ON c.product_id = p.id WHERE REPLACE(LOWER(p.seller_sku), ' ', '-') = REPLACE(LOWER(stock_batch_items.seller_sku), ' ', '-') LIMIT 1),
-        cogs_tenaga_kerja = (SELECT c.tenaga_kerja FROM product_cogs c JOIN products p ON c.product_id = p.id WHERE REPLACE(LOWER(p.seller_sku), ' ', '-') = REPLACE(LOWER(stock_batch_items.seller_sku), ' ', '-') LIMIT 1),
-        cogs_overhead = (SELECT c.overhead FROM product_cogs c JOIN products p ON c.product_id = p.id WHERE REPLACE(LOWER(p.seller_sku), ' ', '-') = REPLACE(LOWER(stock_batch_items.seller_sku), ' ', '-') LIMIT 1),
-        cogs_total = (SELECT (c.bahan_utama + c.aksesori + c.kemasan + c.tenaga_kerja + c.overhead) FROM product_cogs c JOIN products p ON c.product_id = p.id WHERE REPLACE(LOWER(p.seller_sku), ' ', '-') = REPLACE(LOWER(stock_batch_items.seller_sku), ' ', '-') LIMIT 1),
-        target_price = (SELECT c.target_price FROM product_cogs c JOIN products p ON c.product_id = p.id WHERE REPLACE(LOWER(p.seller_sku), ' ', '-') = REPLACE(LOWER(stock_batch_items.seller_sku), ' ', '-') LIMIT 1),
-        tiktok_fee_percent = (SELECT c.tiktok_fee_percent FROM product_cogs c JOIN products p ON c.product_id = p.id WHERE REPLACE(LOWER(p.seller_sku), ' ', '-') = REPLACE(LOWER(stock_batch_items.seller_sku), ' ', '-') LIMIT 1)
-      WHERE cogs_total IS NULL
-    `).run();
-
-    // 3. Fallback for component parts (JKT-BW, JKT-TOP, PNC-BW)
-    sqlite.prepare(`
-      UPDATE stock_batch_items
-      SET
-        cogs_bahan_utama = 7370, cogs_aksesori = 0, cogs_kemasan = 0, cogs_tenaga_kerja = 3450, cogs_overhead = 3520, cogs_total = 14340, target_price = 27000, tiktok_fee_percent = 25
-      WHERE cogs_total IS NULL AND (seller_sku LIKE 'JKT-BW%' OR seller_sku LIKE 'CLN%')
-    `).run();
-
-    sqlite.prepare(`
-      UPDATE stock_batch_items
-      SET
-        cogs_bahan_utama = 15600, cogs_aksesori = 4446, cogs_kemasan = 2734, cogs_tenaga_kerja = 3600, cogs_overhead = 3520, cogs_total = 29900, target_price = 49900, tiktok_fee_percent = 30
-      WHERE cogs_total IS NULL AND (seller_sku LIKE 'JKT-TOP%' OR seller_sku LIKE 'JKT%')
-    `).run();
-
-    sqlite.prepare(`
-      UPDATE stock_batch_items
-      SET
-        cogs_bahan_utama = 12000, cogs_aksesori = 2000, cogs_kemasan = 2500, cogs_tenaga_kerja = 3500, cogs_overhead = 3500, cogs_total = 23500, target_price = 45000, tiktok_fee_percent = 25
-      WHERE cogs_total IS NULL AND (seller_sku LIKE 'PNC-BW%' OR seller_sku LIKE 'ROK%')
-    `).run();
-
-    console.log('[db:migrate] Backfilled COGS for all stock_batch_items.');
-  } catch (err) {
-    console.warn('[db:migrate] Note on backfilling batch items COGS:', err);
-  }
-
+  sqlite.transaction(() => {
+    sqlite.exec(`
+      CREATE TRIGGER IF NOT EXISTS batch_count_insert AFTER INSERT ON orders BEGIN
+        UPDATE batches SET total_orders=total_orders+1 WHERE id=NEW.batch_id; END;
+      CREATE TRIGGER IF NOT EXISTS batch_count_delete AFTER DELETE ON orders BEGIN
+        UPDATE batches SET total_orders=total_orders-1 WHERE id=OLD.batch_id; END;
+      CREATE TRIGGER IF NOT EXISTS batch_count_move AFTER UPDATE OF batch_id ON orders WHEN NEW.batch_id!=OLD.batch_id BEGIN
+        UPDATE batches SET total_orders=total_orders-1 WHERE id=OLD.batch_id;
+        UPDATE batches SET total_orders=total_orders+1 WHERE id=NEW.batch_id; END;
+      UPDATE batches SET total_orders=(SELECT count(*) FROM orders WHERE batch_id=batches.id)
+        WHERE total_orders!=(SELECT count(*) FROM orders WHERE batch_id=batches.id);
+    `);
+  }).immediate();
   installInventoryLedger(sqlite);
 
   // Ensure database index on performance-critical columns

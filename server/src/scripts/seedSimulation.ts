@@ -338,7 +338,7 @@ export async function seedSimulationData() {
         name: onlineBatchName,
         source_filename: 'tiktok_labels_gabungan_nov2026.pdf',
         pdf_path: 'data/uploads/pdf/tiktok_labels_gabungan_nov2026.pdf',
-        total_orders: 20,
+        total_orders: 0,
         created_by: userId,
         uploaded_at: '2026-10-31 08:30:00',
       })

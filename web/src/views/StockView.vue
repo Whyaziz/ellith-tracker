@@ -20,6 +20,8 @@ interface StockItem {
   shipped: number;
   total_mutations: number;
   current_stock: number;
+  physical_stock: number;
+  available_stock: number;
   stock_status: 'habis' | 'menipis' | 'berlebih' | 'normal';
 }
 
@@ -189,12 +191,12 @@ const adjustError = ref('');
 
 const adjustDiff = computed(() => {
   if (!adjustingItem.value) return 0;
-  return (adjustTargetStock.value || 0) - adjustingItem.value.current_stock;
+  return (adjustTargetStock.value || 0) - adjustingItem.value.physical_stock;
 });
 
 function openAdjustStock(item: StockItem) {
   adjustingItem.value = item;
-  adjustTargetStock.value = item.current_stock;
+  adjustTargetStock.value = item.physical_stock;
   adjustNotes.value = '';
   adjustError.value = '';
   showAdjustModal.value = true;
@@ -214,6 +216,7 @@ async function submitDirectAdjustment() {
     await api.post('/api/stock/adjust', {
       seller_sku: adjustingItem.value.seller_sku,
       target_stock: Number(adjustTargetStock.value),
+      expected_physical_stock: adjustingItem.value.physical_stock,
       notes: adjustNotes.value.trim() || undefined,
     });
     showAdjustModal.value = false;
@@ -973,7 +976,7 @@ onMounted(() => {
                       class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300 inline-flex items-center space-x-1"
                     >
                       <span class="w-1.5 h-1.5 rounded-full bg-amber-600"></span>
-                      <span>Menipis (&lt; {{ it.min_stock }})</span>
+                      <span>Menipis (&le; {{ it.min_stock }})</span>
                     </span>
                     <span
                       v-else-if="it.stock_status === 'berlebih'"
@@ -1531,7 +1534,7 @@ onMounted(() => {
           </div>
           <div class="flex items-center justify-between pt-1.5 border-t border-slate-200/60">
             <span class="text-slate-500 font-medium">Stok Fisik Saat Ini:</span>
-            <span class="font-mono font-black text-slate-900">{{ adjustingItem.current_stock.toLocaleString('id-ID') }} pcs</span>
+            <span class="font-mono font-black text-slate-900">{{ adjustingItem.physical_stock.toLocaleString('id-ID') }} pcs</span><small>Dipesan {{ adjustingItem.physical_stock - adjustingItem.available_stock }} pcs / Tersedia {{ adjustingItem.available_stock }} pcs</small>
           </div>
         </div>
 

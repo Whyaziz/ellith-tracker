@@ -324,6 +324,8 @@ export async function undoScan(params: {
   }, { behavior: 'immediate' });
 }
 
+const visibleScan = sql`${scan_logs.id} > coalesce((SELECT CAST(value AS INTEGER) FROM system_settings WHERE key='scan_history_hidden_through'),0)`;
+
 export async function getRecentScanLogs(limit = 30) {
   const logs = await db
     .select({
@@ -344,6 +346,7 @@ export async function getRecentScanLogs(limit = 30) {
     .from(scan_logs)
     .leftJoin(users, eq(scan_logs.user_id, users.id))
     .leftJoin(orders, eq(scan_logs.order_id, orders.id))
+    .where(visibleScan)
     .orderBy(desc(scan_logs.id))
     .limit(limit);
 
@@ -360,7 +363,7 @@ export async function getScanStats() {
       notFound: sql<number>`coalesce(sum(case when ${scan_logs.result} = 'tidak_ditemukan' then 1 else 0 end), 0)`,
       invalidStatus: sql<number>`coalesce(sum(case when ${scan_logs.result} = 'status_tidak_valid' then 1 else 0 end), 0)`,
     })
-    .from(scan_logs);
+    .from(scan_logs).where(visibleScan);
 
   const [orderStats] = await db
     .select({
@@ -402,7 +405,8 @@ export async function clearScanLogs(userId: number, password: string) {
     throw new Error('Password konfirmasi salah. Pembersihan riwayat scan dibatalkan.');
   }
 
-  await db.delete(scan_logs);
+  db.run(sql`INSERT INTO system_settings(key,value) VALUES ('scan_history_hidden_through',
+    (SELECT coalesce(max(id),0) FROM scan_logs)) ON CONFLICT(key) DO UPDATE SET value=excluded.value`);
 
   return {
     success: true,

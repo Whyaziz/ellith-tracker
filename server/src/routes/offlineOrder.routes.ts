@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.js';
 import {
@@ -5,6 +6,7 @@ import {
   getOfflineOrders,
   getOfflineOrderById,
   updateOfflineOrder,
+  updateOfflinePrices,
   deleteOfflineOrder,
 } from '../services/offlineOrderService.js';
 
@@ -57,6 +59,22 @@ offlineOrderRouter.put('/:id', requireAuth, async (req, res, next) => {
     const updated = await updateOfflineOrder(id, req.body);
     res.json({ message: 'Pesanan offline berhasil diperbarui', order: updated });
   } catch (err) {
+    next(err);
+  }
+});
+
+const priceChanges = z.array(z.object({
+  id: z.number().int().positive(), previous: z.number().finite(), price: z.number().finite().nonnegative(),
+})).nonempty();
+
+offlineOrderRouter.put('/:id/prices', requireAuth, (req, res, next) => {
+  const changes = priceChanges.safeParse(req.body?.changes);
+  if (!changes.success) return res.status(400).json({ error: 'Harga jual harus berupa angka nol atau lebih.' });
+  try {
+    updateOfflinePrices(Number(req.params.id), changes.data);
+    res.json({ message: 'Harga jual disimpan.' });
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith('Rincian nota')) return res.status(409).json({ error: err.message });
     next(err);
   }
 });

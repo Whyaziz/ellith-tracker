@@ -1,4 +1,4 @@
-import { eq, or, like, sql, desc, isNull, and } from 'drizzle-orm';
+import { eq, or, like, sql, desc } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import {
   customers,
@@ -7,6 +7,12 @@ import {
   type Customer,
   type NewCustomer,
 } from '../db/schema.js';
+
+const resolvedCustomerId = sql<number | null>`COALESCE(${offline_orders.customer_id}, (
+  SELECT CASE WHEN count(*)=1 THEN min(c.id) END FROM customers c
+  WHERE lower(trim(c.name))=lower(trim(${offline_orders.customer_name}))
+    AND (coalesce(${offline_orders.customer_phone},'')='' OR trim(c.phone)=trim(${offline_orders.customer_phone}))
+))`;
 
 export interface CreateCustomerInput {
   name: string;
@@ -89,10 +95,10 @@ export async function getCustomers(filters?: {
   // Agregasi item dan pesanan secara efisien dengan Map O(O + I)
   const allOrders = await db.select({
     id: offline_orders.id,
-    customer_id: offline_orders.customer_id,
+    customer_id: resolvedCustomerId,
     customer_name: offline_orders.customer_name,
     order_date: offline_orders.order_date,
-  }).from(offline_orders);
+  }).from(offline_orders).where(sql`${offline_orders.status} != 'dibatalkan'`);
 
   const allItems = await db.select({
     offline_order_id: offline_order_items.offline_order_id,
@@ -106,7 +112,7 @@ export async function getCustomers(filters?: {
 
   // Pre-agregasi per customer_id dan per customer_name
   const custIdStats = new Map<number, { totalOrders: number; totalQty: number; latestDate: string | null }>();
-  const custNameStats = new Map<string, { totalOrders: number; totalQty: number; latestDate: string | null }>();
+
 
   for (const ord of allOrders) {
     const qty = orderQtyMap.get(ord.id) || 0;
@@ -118,28 +124,15 @@ export async function getCustomers(filters?: {
         stat.latestDate = ord.order_date;
       }
       custIdStats.set(ord.customer_id, stat);
-    } else if (ord.customer_name) {
-      const nameKey = ord.customer_name.trim().toLowerCase();
-      const stat = custNameStats.get(nameKey) || { totalOrders: 0, totalQty: 0, latestDate: null };
-      stat.totalOrders += 1;
-      stat.totalQty += qty;
-      if (!stat.latestDate || ord.order_date > stat.latestDate) {
-        stat.latestDate = ord.order_date;
-      }
-      custNameStats.set(nameKey, stat);
+
     }
   }
 
   return rows.map((cust) => {
     const byId = custIdStats.get(cust.id);
-    const byName = custNameStats.get(cust.name.trim().toLowerCase());
-
-    const totalOrdersCount = (byId?.totalOrders || 0) + (byName?.totalOrders || 0);
-    const totalItemsPurchased = (byId?.totalQty || 0) + (byName?.totalQty || 0);
-
-    const dates = [byId?.latestDate, byName?.latestDate].filter(Boolean) as string[];
-    const latestDate = dates.length > 0 ? dates.sort().reverse()[0] : null;
-
+    const totalOrdersCount = byId?.totalOrders ?? 0;
+    const totalItemsPurchased = byId?.totalQty ?? 0;
+    const latestDate = byId?.latestDate ?? null;
     return {
       ...cust,
       total_items_purchased: totalItemsPurchased,
@@ -162,15 +155,7 @@ export async function getCustomerById(id: number) {
   const ordersList = await db
     .select()
     .from(offline_orders)
-    .where(
-      or(
-        eq(offline_orders.customer_id, id),
-        and(
-          isNull(offline_orders.customer_id),
-          eq(sql`lower(${offline_orders.customer_name})`, customer.name.trim().toLowerCase())
-        )
-      )
-    )
+    .where(sql`${resolvedCustomerId} = ${id}`)
     .orderBy(desc(offline_orders.order_date), desc(offline_orders.id));
 
   const detailedOrders = [];
@@ -186,8 +171,10 @@ export async function getCustomerById(id: number) {
     const orderQty = items.reduce((acc, it) => acc + (it.qty || 0), 0);
     const orderTotal = items.reduce((acc, it) => acc + (it.qty || 0) * (it.price || 0), 0);
 
-    totalItemsPurchased += orderQty;
-    totalSpentAmount += orderTotal;
+    if (ord.status !== 'dibatalkan') {
+      totalItemsPurchased += orderQty;
+      totalSpentAmount += orderTotal;
+    }
 
     detailedOrders.push({
       ...ord,
@@ -200,7 +187,7 @@ export async function getCustomerById(id: number) {
   return {
     ...customer,
     total_items_purchased: totalItemsPurchased,
-    total_orders_count: detailedOrders.length,
+    total_orders_count: ordersList.filter(o=>o.status!=='dibatalkan').length,
     total_spent_amount: totalSpentAmount,
     orders: detailedOrders,
   };

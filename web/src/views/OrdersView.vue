@@ -190,16 +190,29 @@ function removeEditItem(index: number) {
   editOrderForm.value.items.splice(index, 1);
 }
 
+const itemsLocked = computed(() => {
+  const order = orders.value.find(o => o.id === editOrderForm.value.id) ?? selectedOrder.value;
+  return !!(order?.is_packed || order?.is_shipped);
+});
+async function undoLastScan(order: Order) {
+  if (!window.confirm('Batalkan tahap scan terakhir untuk resi ini?')) return;
+  try {
+    await api.post('/api/scan/undo',{orderId:order.id,mode:order.is_shipped?'pengiriman':'packing'});
+    await fetchOrders();
+    selectedOrder.value = orders.value.find(o=>o.id===order.id) ?? null;
+  } catch (err) { alert(err instanceof Error ? err.message : 'Gagal membatalkan scan'); }
+}
+
 async function saveEditOrder() {
   if (!editOrderForm.value.resi.trim() || !editOrderForm.value.recipient_name.trim()) {
     alert('No. Resi dan Nama Penerima wajib diisi');
     return;
   }
-  if (editOrderForm.value.items.length === 0) {
+  if (!itemsLocked.value && editOrderForm.value.items.length === 0) {
     alert('Pesanan harus memiliki minimal 1 barang');
     return;
   }
-  for (const it of editOrderForm.value.items) {
+  for (const it of itemsLocked.value ? [] : editOrderForm.value.items) {
     if (!it.product_name.trim() || !it.sku.trim()) {
       alert('Nama barang dan SKU tidak boleh kosong');
       return;
@@ -226,7 +239,7 @@ async function saveEditOrder() {
       sorting_code: editOrderForm.value.sorting_code.trim() || null,
       needs_review: editOrderForm.value.needs_review,
       validation_notes: editOrderForm.value.validation_notes.trim() || null,
-      items: editOrderForm.value.items.map((it) => ({
+      items: itemsLocked.value ? undefined : editOrderForm.value.items.map((it) => ({
         product_name: it.product_name.trim(),
         sku: it.sku.trim(),
         seller_sku: it.seller_sku.trim() || null,
@@ -429,18 +442,7 @@ const stats = computed(() => {
   return { total, unpacked, packed, shipped, cancelled };
 });
 
-function getOrderDateYmd(order: Order): string {
-  if (order.ship_date) {
-    const parts = order.ship_date.split('-');
-    if (parts.length === 3) {
-      return `${parts[2]}-${parts[1]}-${parts[0]}`;
-    }
-  }
-  if (order.created_at) {
-    return order.created_at.slice(0, 10);
-  }
-  return '';
-}
+
 
 // Filtered list
 const filteredOrders = computed(() => {
@@ -457,12 +459,7 @@ const filteredOrders = computed(() => {
     }
 
     // Filter rentang tanggal (Start Date & End Date)
-    if (startDate.value || endDate.value) {
-      const orderYmd = getOrderDateYmd(order);
-      if (!orderYmd) return false;
-      if (startDate.value && orderYmd < startDate.value) return false;
-      if (endDate.value && orderYmd > endDate.value) return false;
-    }
+
 
     // Search query filter
     if (searchQuery.value.trim()) {
@@ -525,7 +522,12 @@ async function fetchBatches() {
   }
 }
 
+let requestNumber = 0;
+const fetchError = ref('');
 async function fetchOrders() {
+  const request = ++requestNumber;
+  orders.value = [];
+  fetchError.value = '';
   isLoading.value = true;
   try {
     const params = new URLSearchParams();
@@ -542,11 +544,11 @@ async function fetchOrders() {
     const res = await api.get<{ orders: Order[]; total: number }>(
       `/api/orders?${params.toString()}`
     );
-    orders.value = res.orders;
-  } catch (err) {
-    console.error('Gagal mengambil pesanan:', err);
+    if (request === requestNumber) orders.value = res.orders;
+  } catch {
+    if (request === requestNumber) fetchError.value = 'Gagal mengambil pesanan. Coba lagi.';
   } finally {
-    isLoading.value = false;
+    if (request === requestNumber) isLoading.value = false;
   }
 }
 
@@ -612,6 +614,7 @@ onUnmounted(() => {
 
 <template>
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+    <p v-if="fetchError" role="alert" class="text-rose-700">{{ fetchError }} <button @click="fetchOrders">Muat ulang</button></p>
     <!-- Header with ELLITH Branding & Action Buttons -->
     <div
       class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-slate-200/80 pb-5"
@@ -1754,6 +1757,8 @@ onUnmounted(() => {
               <span v-else>Pulihkan Pesanan</span>
             </button>
 
+            <button v-if="selectedOrder.is_packed && selectedOrder.status !== 'dibatalkan'" type="button"
+              class="text-sm font-semibold" @click="undoLastScan(selectedOrder)">Batalkan scan terakhir</button>
             <button
               type="button"
               @click="openEditOrder(selectedOrder)"
@@ -1959,7 +1964,7 @@ onUnmounted(() => {
           </div>
 
           <!-- Rincian Item Barang (Dinamis: Tambah/Edit/Hapus) -->
-          <div class="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 space-y-3">
+          <fieldset :disabled="itemsLocked" class="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 space-y-3">
             <div class="flex items-center justify-between">
               <div>
                 <h4 class="font-bold uppercase tracking-wider text-slate-700">
@@ -2055,7 +2060,7 @@ onUnmounted(() => {
                 </tbody>
               </table>
             </div>
-          </div>
+          </fieldset>
 
           <!-- Status Verifikasi & Catatan -->
           <div class="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 space-y-2">

@@ -5,7 +5,7 @@ import { db } from '../db/client.js';
 import { batches, orders, order_items, scan_logs, products } from '../db/schema.js';
 import { parseJtPdf, type ParsedOrder, type ParsedItem } from '../parsers/jnt.js';
 import { config } from '../config.js';
-import { isSkuMatch, findMasterProductForOrderItem } from './stockService.js';
+import { findMasterProductForOrderItem } from './stockService.js';
 
 export interface DuplicateInfo {
   batch_id: number;
@@ -228,7 +228,7 @@ export async function processAndSaveBatch(input: CreateBatchInput): Promise<{
         name: batchName,
         source_filename: input.sourceFilename,
         pdf_path: input.pdfPath,
-        total_orders: newOrdersCount, // Simpan jumlah pesanan baru yang berhasil masuk di batch ini
+        total_orders: 0, // Trigger SQLite menghitung keanggotaan resi.
         uploaded_at: new Date().toISOString(),
         created_by: input.userId,
       })
@@ -249,7 +249,7 @@ export async function processAndSaveBatch(input: CreateBatchInput): Promise<{
 
     for (const parsed of enrichedOrders) {
       if (parsed.is_duplicate) {
-        if (skipDuplicates) {
+        if (skipDuplicates || parsed.duplicate_info?.status === 'duplikat_internal') {
           // DISCARD / SKIP: Jangan ubah data pesanan yang sudah ada di database
           skippedCount++;
           continue;
@@ -361,7 +361,7 @@ export async function processAndSaveBatch(input: CreateBatchInput): Promise<{
     }
 
     return {
-      batch: createdBatch,
+      batch: { ...createdBatch, total_orders: insertedCount + updatedCount },
       parseResult: enrichedResult,
       stats: {
         total: enrichedResult.totalOrders,
@@ -407,33 +407,13 @@ export async function getOrders(filters: {
   if (filters.needsReview !== undefined) {
     conditions.push(eq(orders.needs_review, filters.needsReview));
   }
-  if (filters.date) {
-    const ymd = filters.date.trim();
-    const parts = ymd.split('-');
-    if (parts.length === 3) {
-      const dmy = `${parts[2]}-${parts[1]}-${parts[0]}`;
-      conditions.push(
-        or(
-          like(orders.created_at, `${ymd}%`),
-          eq(orders.ship_date, dmy)
-        )
-      );
-    } else {
-      conditions.push(like(orders.created_at, `${ymd}%`));
-    }
-  }
-  if (filters.startDate) {
-    const startYmd = filters.startDate.trim();
-    conditions.push(
-      sql`(${orders.created_at} >= ${startYmd + ' 00:00:00'} OR (${orders.ship_date} IS NOT NULL AND (substr(${orders.ship_date}, 7, 4) || '-' || substr(${orders.ship_date}, 4, 2) || '-' || substr(${orders.ship_date}, 1, 2)) >= ${startYmd}))`
-    );
-  }
-  if (filters.endDate) {
-    const endYmd = filters.endDate.trim();
-    conditions.push(
-      sql`(${orders.created_at} <= ${endYmd + ' 23:59:59'} OR (${orders.ship_date} IS NOT NULL AND (substr(${orders.ship_date}, 7, 4) || '-' || substr(${orders.ship_date}, 4, 2) || '-' || substr(${orders.ship_date}, 1, 2)) <= ${endYmd}))`
-    );
-  }
+  const effectiveDate = sql`CASE WHEN ${orders.ship_date} GLOB '??-??-????'
+    THEN substr(${orders.ship_date},7,4)||'-'||substr(${orders.ship_date},4,2)||'-'||substr(${orders.ship_date},1,2)
+    WHEN ${orders.ship_date} GLOB '????-??-??' THEN ${orders.ship_date}
+    ELSE date(${orders.created_at},'+7 hours') END`;
+  if (filters.date) conditions.push(sql`${effectiveDate} = ${filters.date.trim()}`);
+  if (filters.startDate) conditions.push(sql`${effectiveDate} >= ${filters.startDate.trim()}`);
+  if (filters.endDate) conditions.push(sql`${effectiveDate} <= ${filters.endDate.trim()}`);
   if (filters.search) {
     const term = `%${filters.search.trim()}%`;
     conditions.push(
@@ -537,39 +517,42 @@ export async function updateBatch(id: number, input: { name: string }) {
 }
 
 export async function deleteBatch(id: number) {
-  const [batch] = await db.select().from(batches).where(eq(batches.id, id)).limit(1);
+  const {batch, orderIds} = db.transaction(tx => {
+  const [batch] = tx.select().from(batches).where(eq(batches.id, id)).limit(1).all();
   if (!batch) {
     throw new Error(`Batch dengan ID #${id} tidak ditemukan`);
   }
 
   // Cari semua ID pesanan di dalam batch ini
-  const batchOrders = await db
+  const batchOrders = tx
     .select({ id: orders.id })
     .from(orders)
-    .where(eq(orders.batch_id, id));
+    .where(eq(orders.batch_id, id)).all();
   const orderIds = batchOrders.map((o) => o.id);
 
   if (orderIds.length > 0) {
     // 1. Hapus rincian item barang pesanan
-    await db.delete(order_items).where(inArray(order_items.order_id, orderIds));
+    tx.delete(order_items).where(inArray(order_items.order_id, orderIds)).run();
 
     // 2. Putuskan relasi scan_logs agar log riwayat scan tetap tersimpan
-    await db.update(scan_logs).set({ order_id: null }).where(inArray(scan_logs.order_id, orderIds));
+    tx.update(scan_logs).set({ order_id: null }).where(inArray(scan_logs.order_id, orderIds)).run();
 
     // 3. Hapus data pesanan
-    await db.delete(orders).where(eq(orders.batch_id, id));
+    tx.delete(orders).where(eq(orders.batch_id, id)).run();
   }
 
   // 4. Hapus data batch
-  await db.delete(batches).where(eq(batches.id, id));
+  tx.delete(batches).where(eq(batches.id, id)).run();
 
+    return {batch, orderIds};
+  }, {behavior:"immediate"});
   // 5. Hapus file fisik PDF jika ada (hanya jika berada di dalam folder upload data/pdf)
-  if (batch.pdf_path) {
+  if (batch.pdf_path && !db.select({id:batches.id}).from(batches).where(eq(batches.pdf_path,batch.pdf_path)).limit(1).get()) {
     try {
       const resolvedPath = path.resolve(batch.pdf_path);
       const pdfUploadDir = path.resolve(config.paths.pdfDir);
       // Cegah penghapusan jika file berada di luar direktori pdf upload (misal file fixture di docs)
-      if (resolvedPath.startsWith(pdfUploadDir) && fs.existsSync(resolvedPath)) {
+      if (resolvedPath.startsWith(pdfUploadDir + path.sep) && fs.existsSync(resolvedPath)) {
         fs.unlinkSync(resolvedPath);
       }
     } catch {
@@ -693,29 +676,23 @@ export async function updateOrder(id: number, input: UpdateOrderInput) {
 }
 
 export async function deleteOrder(id: number) {
-  const [order] = await db.select().from(orders).where(eq(orders.id, id)).limit(1);
+  return db.transaction(tx => {
+  const [order] = tx.select().from(orders).where(eq(orders.id, id)).limit(1).all();
   if (!order) {
     throw new Error(`Pesanan dengan ID #${id} tidak ditemukan`);
   }
 
   // 1. Hapus item barang pesanan
-  await db.delete(order_items).where(eq(order_items.order_id, id));
+  tx.delete(order_items).where(eq(order_items.order_id, id)).run();
 
   // 2. Putuskan relasi scan_logs
-  await db.update(scan_logs).set({ order_id: null }).where(eq(scan_logs.order_id, id));
+  tx.update(scan_logs).set({ order_id: null }).where(eq(scan_logs.order_id, id)).run();
 
   // 3. Hapus pesanan
-  await db.delete(orders).where(eq(orders.id, id));
-
-  // 4. Kurangi total_orders di tabel batches
-  await db
-    .update(batches)
-    .set({
-      total_orders: sql`MAX(0, ${batches.total_orders} - 1)`,
-    })
-    .where(eq(batches.id, order.batch_id));
+  tx.delete(orders).where(eq(orders.id, id)).run();
 
   return { success: true, deletedResi: order.resi, batchId: order.batch_id };
+  }, {behavior:'immediate'});
 }
 
 export async function cancelOrder(id: number) {

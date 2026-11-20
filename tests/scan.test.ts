@@ -235,7 +235,9 @@ describe('Scan Service (server/src/services/scanService.ts)', () => {
     );
   });
 
-  it('clears all scan logs successfully with correct password', async () => {
+  it('clears the visible history and preserves the last scan for undo', async () => {
+    const packed = await processScan({ resi: testResi1, mode:'packing',userId:testUserId });
+    expect(packed.result).toBe('ok');
     const res = await clearScanLogs(testUserId, 'admin123');
     expect(res.success).toBe(true);
 
@@ -244,5 +246,7 @@ describe('Scan Service (server/src/services/scanService.ts)', () => {
 
     const statsAfter = await getScanStats();
     expect(statsAfter.totalLogs).toBe(0);
+    const undone = await undoScan({orderId:packed.order!.id,mode:"packing",userId:testUserId});
+    expect(undone.order.is_packed).toBe(false);
   });
 });

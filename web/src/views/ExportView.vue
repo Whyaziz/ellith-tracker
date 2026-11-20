@@ -59,7 +59,12 @@ async function fetchBatches() {
   }
 }
 
+let requestNumber = 0;
+const fetchError = ref('');
 async function fetchOrders() {
+  const request = ++requestNumber;
+  orders.value = [];
+  fetchError.value = '';
   isLoading.value = true;
   try {
     const params = new URLSearchParams();
@@ -73,26 +78,15 @@ async function fetchOrders() {
       params.append('end_date', endDate.value);
     }
     const res = await api.get<{ orders: Order[]; total: number }>(`/api/orders?${params.toString()}`);
-    orders.value = res.orders;
-  } catch (err) {
-    console.error('Gagal memuat data pesanan untuk export:', err);
+    if (request === requestNumber) orders.value = res.orders;
+  } catch {
+    if (request === requestNumber) fetchError.value = 'Gagal mengambil pesanan. Coba lagi.';
   } finally {
-    isLoading.value = false;
+    if (request === requestNumber) isLoading.value = false;
   }
 }
 
-function getOrderDateYmd(order: Order): string {
-  if (order.ship_date) {
-    const parts = order.ship_date.split('-');
-    if (parts.length === 3) {
-      return `${parts[2]}-${parts[1]}-${parts[0]}`;
-    }
-  }
-  if (order.created_at) {
-    return order.created_at.slice(0, 10);
-  }
-  return '';
-}
+
 
 const filteredOrders = computed(() => {
   return orders.value.filter((o) => {
@@ -106,18 +100,14 @@ const filteredOrders = computed(() => {
       if (o.status !== 'dibatalkan') return false;
     }
 
-    if (startDate.value || endDate.value) {
-      const orderYmd = getOrderDateYmd(o);
-      if (!orderYmd) return false;
-      if (startDate.value && orderYmd < startDate.value) return false;
-      if (endDate.value && orderYmd > endDate.value) return false;
-    }
+
 
     return true;
   });
 });
 
 function exportToCsv() {
+  if (isLoading.value || fetchError.value || !filteredOrders.value.length) return;
   isExporting.value = true;
   try {
     const headers = [
@@ -245,6 +235,7 @@ onMounted(async () => {
 
 <template>
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+    <p v-if="fetchError" role="alert" class="text-rose-700">{{ fetchError }} <button @click="fetchOrders">Muat ulang</button></p>
     <!-- Breadcrumb back link -->
     <div>
       <RouterLink

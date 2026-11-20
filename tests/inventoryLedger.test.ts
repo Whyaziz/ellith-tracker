@@ -12,6 +12,8 @@ import {
 import {
   createOfflineOrder,
   updateOfflineOrder,
+  updateOfflinePrices,
+  getOfflineOrderById,
 } from '../server/src/services/offlineOrderService.js';
 import {
   createStockBatch,
@@ -54,9 +56,11 @@ it('reconciles split lots, historical cost, invoice edits and online volume', as
   expect(order!.items[0].cogs_unit_ma).toBeCloseTo(120000 / 7);
   expect((await getStockOverview())[0].health_status).toBe('understock');
   await receive(1, 90000);
-  const edited = await updateOfflineOrder(order!.id, {
-    items: [{ seller_sku: sku, qty: 4, price: 31000 }],
-  });
+  const lineId = order!.items[0].id;
+  updateOfflinePrices(order!.id, [{ id: lineId, previous: 30000, price: 31000 }]);
+  expect(() => updateOfflinePrices(order!.id, [{ id: lineId, previous: 30000, price: 0 }])).toThrow();
+  const edited = await getOfflineOrderById(order!.id);
+  expect(edited!.total_amount).toBe(124000);
   expect(edited!.items[0].cogs_unit_ma).toBe(order!.items[0].cogs_unit_ma);
   const batch = db
     .insert(batches)
