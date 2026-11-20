@@ -9,6 +9,7 @@ import { stockRouter } from './stock.routes.js';
 import { offlineOrderRouter } from './offlineOrder.routes.js';
 import { customerRouter } from './customer.routes.js';
 import { dashboardRouter } from './dashboard.routes.js';
+import { cogsRouter } from './cogs.routes.js';
 
 export const apiRouter = Router();
 
@@ -22,4 +23,6 @@ apiRouter.use('/stock', stockRouter);
 apiRouter.use('/offline-orders', offlineOrderRouter);
 apiRouter.use('/customers', customerRouter);
 apiRouter.use('/dashboard', dashboardRouter);
+apiRouter.use('/cogs', cogsRouter);
+
 

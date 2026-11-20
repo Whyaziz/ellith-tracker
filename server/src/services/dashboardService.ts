@@ -40,8 +40,9 @@ function parseToYmd(dateStr: string | null | undefined): string {
  * Mengambil tren penjualan harian dengan filter rentang tanggal khusus untuk Line Chart
  */
 export async function getSalesTrend(filter: SalesTrendFilter = {}) {
-  let { timeframe, startDate, endDate } = filter;
-  const now = new Date();
+  const { timeframe } = filter;
+  let { startDate, endDate } = filter;
+  const now = new Date(new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Jakarta' }).format(new Date()));
 
   // Jika startDate/endDate kosong tapi ada timeframe
   if (!startDate && !endDate && timeframe && timeframe !== 'all') {
@@ -50,16 +51,16 @@ export async function getSalesTrend(filter: SalesTrendFilter = {}) {
       endDate = startDate;
     } else if (timeframe === '7d') {
       const d = new Date(now);
-      d.setDate(d.getDate() - 6);
+      d.setUTCDate(d.getUTCDate() - 6);
       startDate = d.toISOString().slice(0, 10);
       endDate = now.toISOString().slice(0, 10);
     } else if (timeframe === '30d') {
       const d = new Date(now);
-      d.setDate(d.getDate() - 29);
+      d.setUTCDate(d.getUTCDate() - 29);
       startDate = d.toISOString().slice(0, 10);
       endDate = now.toISOString().slice(0, 10);
     } else if (timeframe === 'month') {
-      startDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+      startDate = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-01`;
       endDate = now.toISOString().slice(0, 10);
     }
   }
@@ -152,7 +153,7 @@ export async function getSalesTrend(filter: SalesTrendFilter = {}) {
         if (!dailySalesMap.has(ymd)) {
           dailySalesMap.set(ymd, { total_orders: 0, total_qty: 0 });
         }
-        cur.setDate(cur.getDate() + 1);
+        cur.setUTCDate(cur.getUTCDate() + 1);
       }
     }
   }

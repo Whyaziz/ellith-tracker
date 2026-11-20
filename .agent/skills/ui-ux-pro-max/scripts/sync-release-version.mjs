@@ -21,15 +21,15 @@ function replaceJsonVersion(path, updater) {
   const replacements = [];
 
   function setTopLevelVersion(value) {
-    replacements.push([/(\"version\"\s*:\s*)\"[^\"]+\"/, `$1\"${value}\"`]);
+    replacements.push([/("version"\s*:\s*)"[^"]+"/, `$1"${value}"`]);
   }
 
   function setMetadataVersion(value) {
-    replacements.push([/(\"metadata\"\s*:\s*\{[\s\S]*?\"version\"\s*:\s*)\"[^\"]+\"/, `$1\"${value}\"`]);
+    replacements.push([/("metadata"\s*:\s*\{[\s\S]*?"version"\s*:\s*)"[^"]+"/, `$1"${value}"`]);
   }
 
   function setPluginVersions(value) {
-    replacements.push([/(\"plugins\"\s*:\s*\[[\s\S]*?\"version\"\s*:\s*)\"[^\"]+\"/, `$1\"${value}\"`]);
+    replacements.push([/("plugins"\s*:\s*\[[\s\S]*?"version"\s*:\s*)"[^"]+"/, `$1"${value}"`]);
   }
 
   if (path === '.claude-plugin/marketplace.json') {
@@ -38,7 +38,7 @@ function replaceJsonVersion(path, updater) {
   } else {
     setTopLevelVersion(data.version);
     if (data.packages?.['']?.version) {
-      replacements.push([/(\"packages\"\s*:\s*\{\s*\"\"\s*:\s*\{[\s\S]*?\"version\"\s*:\s*)\"[^\"]+\"/, `$1\"${data.packages[''].version}\"`]);
+      replacements.push([/("packages"\s*:\s*\{\s*""\s*:\s*\{[\s\S]*?"version"\s*:\s*)"[^"]+"/, `$1"${data.packages[''].version}"`]);
     }
   }
 

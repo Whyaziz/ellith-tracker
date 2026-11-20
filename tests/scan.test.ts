@@ -197,6 +197,14 @@ describe('Scan Service (server/src/services/scanService.ts)', () => {
     expect(res.message).toContain('SUDAH PERNAH DIKIRIM');
   });
 
+  it('rejects packing undo after shipping and mismatched scan IDs', async () => {
+    const shipped = db.select().from(orders).where(eq(orders.resi, testResi2)).get()!;
+    const packed = db.select().from(orders).where(eq(orders.resi, testResi1)).get()!;
+    await expect(undoScan({ orderId: shipped.id, mode: 'packing' })).rejects.toThrow();
+    const foreignLog = (await getRecentScanLogs()).find(log => log.order_id === shipped.id)!;
+    await expect(undoScan({ orderId: packed.id, mode: 'packing', logId: foreignLog.id })).rejects.toThrow();
+  });
+
   it('allows undoing a scan operation', async () => {
     // Ambil order 1
     const [order1] = await db.select().from(orders).where(eq(orders.resi, testResi1));

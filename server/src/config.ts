@@ -18,6 +18,7 @@ const envSchema = z.object({
 });
 
 const parsed = envSchema.safeParse(process.env);
+if (parsed.success && parsed.data.NODE_ENV === 'production' && (!process.env.SESSION_SECRET || parsed.data.SESSION_SECRET === 'dev-resi-tracker-session-secret-key-32chars')) throw new Error('SESSION_SECRET produksi wajib diatur secara khusus.');
 if (!parsed.success) {
   console.error('Invalid environment variables:', parsed.error.format());
   process.exit(1);

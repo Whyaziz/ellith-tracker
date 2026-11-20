@@ -220,153 +220,159 @@ export async function processAndSaveBatch(input: CreateBatchInput): Promise<{
   let updatedCount = 0;
   let skippedCount = 0;
 
-  // Insert batch record
-  const [createdBatch] = await db
-    .insert(batches)
-    .values({
-      name: batchName,
-      source_filename: input.sourceFilename,
-      pdf_path: input.pdfPath,
-      total_orders: newOrdersCount, // Simpan jumlah pesanan baru yang berhasil masuk di batch ini
-      uploaded_at: new Date().toISOString(),
-      created_by: input.userId,
-    })
-    .returning();
+  return db.transaction((tx) => {
+    // Insert batch record
+    const [createdBatch] = tx
+      .insert(batches)
+      .values({
+        name: batchName,
+        source_filename: input.sourceFilename,
+        pdf_path: input.pdfPath,
+        total_orders: newOrdersCount, // Simpan jumlah pesanan baru yang berhasil masuk di batch ini
+        uploaded_at: new Date().toISOString(),
+        created_by: input.userId,
+      })
+      .returning().all();
 
-  // Terapkan penyesuaian edit manual dari pratinjau jika disediakan
-  if (input.editedOrders && input.editedOrders.length > 0) {
-    const editMap = new Map(input.editedOrders.map((eo) => [eo.resi, eo.items]));
-    for (const parsed of enrichedOrders) {
-      if (editMap.has(parsed.resi)) {
-        parsed.items = editMap.get(parsed.resi)! as any;
+    // Terapkan penyesuaian edit manual dari pratinjau jika disediakan
+    if (input.editedOrders && input.editedOrders.length > 0) {
+      const editMap = new Map(input.editedOrders.map((eo) => [eo.resi, eo.items]));
+      for (const parsed of enrichedOrders) {
+        if (editMap.has(parsed.resi)) {
+          parsed.items = editMap.get(parsed.resi)! as any;
+        }
       }
     }
-  }
 
-  // Ambil seluruh master produk untuk normalisasi SKU saat penyimpanan
-  const allMasterProducts = await db.select().from(products);
+    // Ambil seluruh master produk untuk normalisasi SKU saat penyimpanan
+    const allMasterProducts = tx.select().from(products).all();
 
-  for (const parsed of enrichedOrders) {
-    if (parsed.is_duplicate) {
-      if (skipDuplicates) {
-        // DISCARD / SKIP: Jangan ubah data pesanan yang sudah ada di database
-        skippedCount++;
+    for (const parsed of enrichedOrders) {
+      if (parsed.is_duplicate) {
+        if (skipDuplicates) {
+          // DISCARD / SKIP: Jangan ubah data pesanan yang sudah ada di database
+          skippedCount++;
+          continue;
+        }
+
+        // Jika skipDuplicates === false (mode overwrite/update paksa)
+        const [existingOrder] = tx
+          .select()
+          .from(orders)
+          .where(eq(orders.resi, parsed.resi))
+          .limit(1).all();
+
+        if (existingOrder && (existingOrder.is_packed || existingOrder.is_shipped || !['menunggu_dikemas','belum_dikemas'].includes(existingOrder.status))) {
+          skippedCount++;
+          continue;
+        }
+        if (existingOrder) {
+          tx
+            .update(orders)
+            .set({
+              batch_id: createdBatch.id,
+              order_id: parsed.order_id,
+              courier: parsed.courier,
+              service: parsed.service,
+              is_cod: parsed.is_cod,
+              weight_kg: parsed.weight_kg,
+              ship_date: parsed.ship_date,
+              recipient_name: parsed.recipient_name,
+              recipient_phone: parsed.recipient_phone,
+              recipient_address: parsed.recipient_address,
+              sorting_code: parsed.sorting_code,
+              qty_total: parsed.qty_total,
+              needs_review: parsed.needs_review,
+              validation_notes: parsed.validation_notes,
+            })
+            .where(eq(orders.id, existingOrder.id)).run();
+
+          updatedCount++;
+          tx.delete(order_items).where(eq(order_items.order_id, existingOrder.id)).run();
+          if (parsed.items.length > 0) {
+            tx.insert(order_items).values(
+              parsed.items.map((item) => {
+                const matched = findMasterProductForOrderItem(item, allMasterProducts);
+                return {
+                  order_id: existingOrder.id,
+                  product_name: item.product_name,
+                  sku: item.sku,
+                  seller_sku: matched?.seller_sku ?? (item.seller_sku || item.sku),
+                  qty: item.qty,
+                };
+              })
+            ).run();
+          }
+        }
         continue;
       }
 
-      // Jika skipDuplicates === false (mode overwrite/update paksa)
-      const [existingOrder] = await db
-        .select()
-        .from(orders)
-        .where(eq(orders.resi, parsed.resi))
-        .limit(1);
-
-      if (existingOrder) {
-        await db
-          .update(orders)
-          .set({
-            batch_id: createdBatch.id,
-            order_id: parsed.order_id,
-            courier: parsed.courier,
-            service: parsed.service,
-            is_cod: parsed.is_cod,
-            weight_kg: parsed.weight_kg,
-            ship_date: parsed.ship_date,
-            recipient_name: parsed.recipient_name,
-            recipient_phone: parsed.recipient_phone,
-            recipient_address: parsed.recipient_address,
-            sorting_code: parsed.sorting_code,
-            qty_total: parsed.qty_total,
-            needs_review: parsed.needs_review,
-            validation_notes: parsed.validation_notes,
-          })
-          .where(eq(orders.id, existingOrder.id));
-
-        updatedCount++;
-        await db.delete(order_items).where(eq(order_items.order_id, existingOrder.id));
-        if (parsed.items.length > 0) {
-          await db.insert(order_items).values(
-            parsed.items.map((item) => {
-              const matched = findMasterProductForOrderItem(item, allMasterProducts);
-              return {
-                order_id: existingOrder.id,
-                product_name: item.product_name,
-                sku: item.sku,
-                seller_sku: matched?.seller_sku ?? (item.seller_sku || item.sku),
-                qty: item.qty,
-              };
-            })
-          );
-        }
-      }
-      continue;
-    }
-
-    // Insert pesanan baru yang belum pernah terdaftar
-    const [newOrder] = await db
-      .insert(orders)
-      .values({
-        batch_id: createdBatch.id,
-        resi: parsed.resi,
-        order_id: parsed.order_id,
-        courier: parsed.courier,
-        service: parsed.service,
-        is_cod: parsed.is_cod,
-        weight_kg: parsed.weight_kg,
-        ship_date: parsed.ship_date,
-        recipient_name: parsed.recipient_name,
-        recipient_phone: parsed.recipient_phone,
-        recipient_address: parsed.recipient_address,
-        sorting_code: parsed.sorting_code,
-        status: 'menunggu_dikemas',
-        is_packed: false,
-        is_shipped: false,
-        qty_total: parsed.qty_total,
-        needs_review: parsed.needs_review,
-        validation_notes: parsed.validation_notes,
-        created_at: new Date().toISOString(),
-      })
-      .returning();
-
-    insertedCount++;
-
-    if (parsed.items.length > 0) {
-      await db.insert(order_items).values(
-        parsed.items.map((item) => {
-          const matched = findMasterProductForOrderItem(item, allMasterProducts);
-          return {
-            order_id: newOrder.id,
-            product_name: item.product_name,
-            sku: item.sku,
-            seller_sku: matched?.seller_sku ?? (item.seller_sku || item.sku),
-            qty: item.qty,
-          };
+      // Insert pesanan baru yang belum pernah terdaftar
+      const [newOrder] = tx
+        .insert(orders)
+        .values({
+          batch_id: createdBatch.id,
+          resi: parsed.resi,
+          order_id: parsed.order_id,
+          courier: parsed.courier,
+          service: parsed.service,
+          is_cod: parsed.is_cod,
+          weight_kg: parsed.weight_kg,
+          ship_date: parsed.ship_date,
+          recipient_name: parsed.recipient_name,
+          recipient_phone: parsed.recipient_phone,
+          recipient_address: parsed.recipient_address,
+          sorting_code: parsed.sorting_code,
+          status: 'menunggu_dikemas',
+          is_packed: false,
+          is_shipped: false,
+          qty_total: parsed.qty_total,
+          needs_review: parsed.needs_review,
+          validation_notes: parsed.validation_notes,
+          created_at: new Date().toISOString(),
         })
-      );
-    }
-  }
+        .returning().all();
 
-  let summaryMessage = `Berhasil menyimpan ${insertedCount} pesanan baru.`;
-  if (skippedCount > 0) {
-    if (insertedCount === 0) {
-      summaryMessage = `Seluruh ${skippedCount} resi merupakan duplikat dan telah dilewati (discard). Tidak ada data baru yang ditambahkan.`;
-    } else {
-      summaryMessage = `Berhasil menyimpan ${insertedCount} pesanan baru. Sebanyak ${skippedCount} resi duplikat dilewati (discard).`;
-    }
-  }
+      insertedCount++;
 
-  return {
-    batch: createdBatch,
-    parseResult: enrichedResult,
-    stats: {
-      total: enrichedResult.totalOrders,
-      inserted: insertedCount,
-      duplicates: duplicateOrdersCount,
-      skipped: skippedCount,
-      updated: updatedCount,
-    },
-    message: summaryMessage,
-  };
+      if (parsed.items.length > 0) {
+        tx.insert(order_items).values(
+          parsed.items.map((item) => {
+            const matched = findMasterProductForOrderItem(item, allMasterProducts);
+            return {
+              order_id: newOrder.id,
+              product_name: item.product_name,
+              sku: item.sku,
+              seller_sku: matched?.seller_sku ?? (item.seller_sku || item.sku),
+              qty: item.qty,
+            };
+          })
+        ).run();
+      }
+    }
+
+    let summaryMessage = `Berhasil menyimpan ${insertedCount} pesanan baru.`;
+    if (skippedCount > 0) {
+      if (insertedCount === 0) {
+        summaryMessage = `Seluruh ${skippedCount} resi merupakan duplikat dan telah dilewati (discard). Tidak ada data baru yang ditambahkan.`;
+      } else {
+        summaryMessage = `Berhasil menyimpan ${insertedCount} pesanan baru. Sebanyak ${skippedCount} resi duplikat dilewati (discard).`;
+      }
+    }
+
+    return {
+      batch: createdBatch,
+      parseResult: enrichedResult,
+      stats: {
+        total: enrichedResult.totalOrders,
+        inserted: insertedCount,
+        duplicates: duplicateOrdersCount,
+        skipped: skippedCount,
+        updated: updatedCount,
+      },
+      message: summaryMessage,
+    };
+  }, { behavior: 'immediate' });
 }
 
 export async function getBatches() {
@@ -600,86 +606,89 @@ export interface UpdateOrderInput {
 }
 
 export async function updateOrder(id: number, input: UpdateOrderInput) {
-  const [order] = await db.select().from(orders).where(eq(orders.id, id)).limit(1);
-  if (!order) {
-    throw new Error(`Pesanan dengan ID #${id} tidak ditemukan`);
-  }
-
-  // Jika resi diubah, pastikan tidak bertabrakan dengan resi lain
-  if (input.resi && input.resi.trim() !== order.resi) {
-    const [existing] = await db
-      .select({ id: orders.id })
-      .from(orders)
-      .where(eq(orders.resi, input.resi.trim()))
-      .limit(1);
-
-    if (existing && existing.id !== id) {
-      throw new Error(`Resi "${input.resi.trim()}" sudah digunakan pada pesanan lain`);
-    }
-  }
-
-  const updateFields: Partial<typeof orders.$inferInsert> = {};
-  if (input.resi !== undefined) updateFields.resi = input.resi.trim();
-  if (input.order_id !== undefined) updateFields.order_id = input.order_id.trim();
-  if (input.courier !== undefined) updateFields.courier = input.courier.trim();
-  if (input.service !== undefined) updateFields.service = input.service.trim();
-  if (input.is_cod !== undefined) updateFields.is_cod = input.is_cod;
-  if (input.weight_kg !== undefined) updateFields.weight_kg = input.weight_kg;
-  if (input.ship_date !== undefined) {
-    updateFields.ship_date = input.ship_date ? input.ship_date.trim() : null;
-  }
-  if (input.recipient_name !== undefined) updateFields.recipient_name = input.recipient_name.trim();
-  if (input.recipient_phone !== undefined) {
-    updateFields.recipient_phone = input.recipient_phone ? input.recipient_phone.trim() : null;
-  }
-  if (input.recipient_address !== undefined) {
-    updateFields.recipient_address = input.recipient_address.trim();
-  }
-  if (input.sorting_code !== undefined) {
-    updateFields.sorting_code = input.sorting_code ? input.sorting_code.trim() : null;
-  }
-  if (input.needs_review !== undefined) updateFields.needs_review = input.needs_review;
-  if (input.validation_notes !== undefined) updateFields.validation_notes = input.validation_notes;
-
-  // Update item list jika diberikan
-  if (input.items && Array.isArray(input.items)) {
-    if (input.items.length === 0) {
-      throw new Error('Pesanan harus memiliki minimal 1 barang');
+  db.transaction(tx => {
+    const [order] = tx.select().from(orders).where(eq(orders.id, id)).limit(1).all();
+    if (!order) {
+      throw new Error(`Pesanan dengan ID #${id} tidak ditemukan`);
     }
 
-    let calculatedQtyTotal = 0;
-    for (const item of input.items) {
-      if (!item.product_name || !item.product_name.trim()) {
-        throw new Error('Nama produk tidak boleh kosong');
+    // Jika resi diubah, pastikan tidak bertabrakan dengan resi lain
+    if (input.resi && input.resi.trim() !== order.resi) {
+      const [existing] = tx
+        .select({ id: orders.id })
+        .from(orders)
+        .where(eq(orders.resi, input.resi.trim()))
+        .limit(1).all();
+
+      if (existing && existing.id !== id) {
+        throw new Error(`Resi "${input.resi.trim()}" sudah digunakan pada pesanan lain`);
       }
-      if (!item.sku || !item.sku.trim()) {
-        throw new Error('SKU produk tidak boleh kosong');
-      }
-      if (typeof item.qty !== 'number' || item.qty <= 0) {
-        throw new Error('Kuantitas (Qty) barang harus lebih besar dari 0');
-      }
-      calculatedQtyTotal += item.qty;
     }
 
-    // Ganti rincian items lama dengan yang baru
-    await db.delete(order_items).where(eq(order_items.order_id, id));
-    await db.insert(order_items).values(
-      input.items.map((it) => ({
-        order_id: id,
-        product_name: it.product_name.trim(),
-        sku: it.sku.trim(),
-        seller_sku: it.seller_sku ? it.seller_sku.trim() : null,
-        qty: it.qty,
-      }))
-    );
+    const updateFields: Partial<typeof orders.$inferInsert> = {};
+    if (input.resi !== undefined) updateFields.resi = input.resi.trim();
+    if (input.order_id !== undefined) updateFields.order_id = input.order_id.trim();
+    if (input.courier !== undefined) updateFields.courier = input.courier.trim();
+    if (input.service !== undefined) updateFields.service = input.service.trim();
+    if (input.is_cod !== undefined) updateFields.is_cod = input.is_cod;
+    if (input.weight_kg !== undefined) updateFields.weight_kg = input.weight_kg;
+    if (input.ship_date !== undefined) {
+      updateFields.ship_date = input.ship_date ? input.ship_date.trim() : null;
+    }
+    if (input.recipient_name !== undefined) updateFields.recipient_name = input.recipient_name.trim();
+    if (input.recipient_phone !== undefined) {
+      updateFields.recipient_phone = input.recipient_phone ? input.recipient_phone.trim() : null;
+    }
+    if (input.recipient_address !== undefined) {
+      updateFields.recipient_address = input.recipient_address.trim();
+    }
+    if (input.sorting_code !== undefined) {
+      updateFields.sorting_code = input.sorting_code ? input.sorting_code.trim() : null;
+    }
+    if (input.needs_review !== undefined) updateFields.needs_review = input.needs_review;
+    if (input.validation_notes !== undefined) updateFields.validation_notes = input.validation_notes;
 
-    updateFields.qty_total = calculatedQtyTotal;
-  }
+    // Update item list jika diberikan
+    if (input.items && Array.isArray(input.items)) {
+      if (order.is_packed || order.is_shipped) throw new Error('Rincian paket yang sudah diproses terkunci.');
+      if (input.items.length === 0) {
+        throw new Error('Pesanan harus memiliki minimal 1 barang');
+      }
 
-  if (Object.keys(updateFields).length > 0) {
-    await db.update(orders).set(updateFields).where(eq(orders.id, id));
-  }
+      let calculatedQtyTotal = 0;
+      for (const item of input.items) {
+        if (!item.product_name || !item.product_name.trim()) {
+          throw new Error('Nama produk tidak boleh kosong');
+        }
+        if (!item.sku || !item.sku.trim()) {
+          throw new Error('SKU produk tidak boleh kosong');
+        }
+        if (typeof item.qty !== 'number' || item.qty <= 0) {
+          throw new Error('Kuantitas (Qty) barang harus lebih besar dari 0');
+        }
+        calculatedQtyTotal += item.qty;
+      }
 
+      // Ganti rincian items lama dengan yang baru
+      tx.delete(order_items).where(eq(order_items.order_id, id)).run();
+      tx.insert(order_items).values(
+        input.items.map((it) => ({
+          order_id: id,
+          product_name: it.product_name.trim(),
+          sku: it.sku.trim(),
+          seller_sku: it.seller_sku ? it.seller_sku.trim() : null,
+          qty: it.qty,
+        }))
+      ).run();
+
+      updateFields.qty_total = calculatedQtyTotal;
+    }
+
+    if (Object.keys(updateFields).length > 0) {
+      tx.update(orders).set(updateFields).where(eq(orders.id, id)).run();
+    }
+
+  }, {behavior:'immediate'});
   return await getOrderById(id);
 }
 

@@ -251,7 +251,24 @@ function closeMobile() {
             <span class="flex-1">Manajemen Stok</span>
           </RouterLink>
 
-          <!-- 7. CRM Pelanggan -->
+          <!-- 7. Kalkulator HPP & Simulasi Profit -->
+          <RouterLink
+            to="/cogs"
+            @click="closeMobile"
+            class="flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition cursor-pointer"
+            :class="[
+              route.path === '/cogs'
+                ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/25'
+                : 'text-slate-600 hover:text-indigo-900 hover:bg-indigo-50/60',
+            ]"
+          >
+            <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+            </svg>
+            <span class="flex-1">Kalkulator HPP</span>
+          </RouterLink>
+
+          <!-- 8. CRM Pelanggan -->
           <RouterLink
             to="/customers"
             @click="closeMobile"
@@ -509,7 +526,23 @@ function closeMobile() {
           <span class="flex-1">Manajemen Stok</span>
         </RouterLink>
 
-        <!-- 7. CRM Pelanggan -->
+        <!-- 7. Kalkulator HPP & Simulasi Profit -->
+        <RouterLink
+          to="/cogs"
+          class="flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 cursor-pointer group"
+          :class="[
+            route.path === '/cogs'
+              ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/25'
+              : 'text-slate-600 hover:text-indigo-900 hover:bg-indigo-50/60',
+          ]"
+        >
+          <svg class="w-5 h-5 shrink-0 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+          </svg>
+          <span class="flex-1">Kalkulator HPP</span>
+        </RouterLink>
+
+        <!-- 8. CRM Pelanggan -->
         <RouterLink
           to="/customers"
           class="flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 cursor-pointer group"
@@ -635,7 +668,23 @@ function closeMobile() {
           </svg>
         </RouterLink>
 
-        <!-- 7. CRM Pelanggan Icon -->
+        <!-- 7. Kalkulator HPP Icon -->
+        <RouterLink
+          to="/cogs"
+          class="w-11 h-11 rounded-xl flex items-center justify-center transition-all duration-200 cursor-pointer relative group"
+          :class="[
+            route.path === '/cogs'
+              ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/25'
+              : 'text-slate-600 hover:text-indigo-900 hover:bg-indigo-50/60',
+          ]"
+          title="Kalkulator HPP & Simulasi Profit"
+        >
+          <svg class="w-5 h-5 shrink-0 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+          </svg>
+        </RouterLink>
+
+        <!-- 8. CRM Pelanggan Icon -->
         <RouterLink
           to="/customers"
           class="w-11 h-11 rounded-xl flex items-center justify-center transition-all duration-200 cursor-pointer relative group"

@@ -1,7 +1,8 @@
 import { eq, or, like, sql, desc, inArray } from 'drizzle-orm';
-import { db } from '../db/client.js';
+import { db, sqlite } from '../db/client.js';
 import { offline_orders, offline_order_items, products, customers } from '../db/schema.js';
 import { findProductBySellerSku } from './productService.js';
+
 
 export interface CreateOfflineOrderItemInput {
   seller_sku: string;
@@ -32,6 +33,32 @@ export interface UpdateOfflineOrderInput {
   items?: CreateOfflineOrderItemInput[];
 }
 
+async function prepareItems(items: CreateOfflineOrderItemInput[]) {
+  const rows: Omit<typeof offline_order_items.$inferInsert, 'offline_order_id'>[] = [];
+
+  for (const item of items) {
+    const cleanSku = item.seller_sku.trim();
+    if (!cleanSku) throw new Error('Seller SKU tidak boleh kosong');
+    if (!Number.isSafeInteger(item.qty) || item.qty <= 0) {
+      throw new Error(`Qty untuk Seller SKU "${cleanSku}" minimal 1`);
+    }
+
+    const prod = await findProductBySellerSku(cleanSku);
+    const productName = item.product_name?.trim() || prod?.name || cleanSku;
+    if (!Number.isFinite(item.price ?? 0) || (item.price ?? 0) < 0) throw new Error("Harga tidak valid");
+
+    rows.push({
+      product_id: prod?.id ?? null,
+      seller_sku: prod?.seller_sku ?? cleanSku,
+      product_name: productName,
+      qty: item.qty,
+      price: item.price ?? 0,
+    });
+  }
+
+  return rows;
+}
+
 export async function createOfflineOrder(input: CreateOfflineOrderInput) {
   if (!input.customer_name || !input.customer_name.trim()) {
     throw new Error('Nama pelanggan wajib diisi');
@@ -58,51 +85,36 @@ export async function createOfflineOrder(input: CreateOfflineOrderInput) {
   // Cari customer_id jika tidak disuplai secara eksplisit tapi ada customer dengan nama yang cocok
   let customerId = input.customer_id ?? null;
   if (!customerId) {
-    const [matchedCustomer] = await db
+    const matches = await db
       .select()
       .from(customers)
       .where(eq(sql`lower(${customers.name})`, input.customer_name.trim().toLowerCase()))
-      .limit(1);
-    if (matchedCustomer) {
-      customerId = matchedCustomer.id;
+      .limit(2);
+    if (matches.length === 1 && (!input.customer_phone || matches[0].phone === input.customer_phone.trim())) {
+      customerId = matches[0].id;
     }
   }
 
-  const [order] = await db
-    .insert(offline_orders)
-    .values({
-      order_no,
-      order_date: input.order_date,
-      customer_id: customerId,
-      customer_name: input.customer_name.trim(),
-      customer_phone: input.customer_phone?.trim() || null,
-      notes: input.notes?.trim() || null,
-      status: input.status || 'selesai',
-      created_by: input.userId,
-    })
-    .returning();
+  const rows = await prepareItems(input.items);
 
-  for (const item of input.items) {
-    const cleanSku = item.seller_sku.trim();
-    if (!cleanSku) throw new Error('Seller SKU tidak boleh kosong');
-    if (typeof item.qty !== 'number' || item.qty <= 0) {
-      throw new Error(`Qty untuk Seller SKU "${cleanSku}" minimal 1`);
-    }
-
-    const prod = await findProductBySellerSku(cleanSku);
-    const productName = item.product_name?.trim() || prod?.name || cleanSku;
-
-    await db.insert(offline_order_items).values({
-      offline_order_id: order.id,
-      product_id: prod?.id ?? null,
-      seller_sku: prod?.seller_sku ?? cleanSku,
-      product_name: productName,
-      qty: item.qty,
-      price: item.price ?? 0,
-    });
-  }
-
-  return await getOfflineOrderById(order.id);
+  const order = db.transaction((tx) => {
+    const [order] = tx
+      .insert(offline_orders)
+      .values({
+        order_no,
+        order_date: input.order_date,
+        customer_id: customerId,
+        customer_name: input.customer_name.trim(),
+        customer_phone: input.customer_phone?.trim() || null,
+        notes: input.notes?.trim() || null,
+        status: input.status || 'selesai',
+        created_by: input.userId,
+      })
+      .returning().all();
+    for (const row of rows) tx.insert(offline_order_items).values({ ...row, offline_order_id: order.id }).run();
+    return order;
+  });
+  return getOfflineOrderById(order.id);
 }
 
 export async function getOfflineOrders(filters?: {
@@ -198,6 +210,31 @@ export async function getOfflineOrderById(id: number) {
   };
 }
 
+// Release the newest allocated units first, retaining the cost of the oldest units on the invoice.
+function shrinkOfflineIssue(itemId: number, original: number, keep: number, unitCost: number) {
+  const issue = sqlite.prepare("SELECT id FROM inventory_issues WHERE source='offline' AND item_id=?").get(itemId) as {id:number} | undefined;
+  if (!issue) return;
+  const lots = sqlite.prepare('SELECT lot_id,qty,unit_cost FROM inventory_allocations WHERE issue_id=? ORDER BY lot_id').all(issue.id) as
+    { lot_id:number; qty:number; unit_cost:number }[];
+  const allocated = lots.reduce((sum, lot) => sum + lot.qty, 0);
+  const historicalValue = lots.reduce((sum, lot) => sum + lot.qty * lot.unit_cost, 0);
+  const fallback = original > allocated ? (original * unitCost - historicalValue) / (original - allocated) : 0;
+  let needed = keep;
+  let value = 0;
+  for (const lot of lots) {
+    const used = Math.min(needed, lot.qty);
+    if (used < lot.qty) {
+      sqlite.prepare('UPDATE stock_batch_items SET remaining_qty=remaining_qty+? WHERE id=?').run(lot.qty-used, lot.lot_id);
+      if (used) sqlite.prepare('UPDATE inventory_allocations SET qty=? WHERE issue_id=? AND lot_id=?').run(used,issue.id,lot.lot_id);
+      else sqlite.prepare('DELETE FROM inventory_allocations WHERE issue_id=? AND lot_id=?').run(issue.id,lot.lot_id);
+    }
+    value += used * lot.unit_cost;
+    needed -= used;
+  }
+  sqlite.prepare('UPDATE inventory_issues SET qty=? WHERE id=?').run(keep,issue.id);
+  sqlite.prepare('UPDATE offline_order_items SET cogs_unit_fifo=? WHERE id=?').run((value+needed*fallback)/keep,itemId);
+}
+
 export async function updateOfflineOrder(id: number, input: UpdateOfflineOrderInput) {
   const [current] = await db
     .select()
@@ -222,29 +259,30 @@ export async function updateOfflineOrder(id: number, input: UpdateOfflineOrderIn
   if (input.notes !== undefined) updateFields.notes = input.notes?.trim() || null;
   if (input.status !== undefined) updateFields.status = input.status;
 
-  if (Object.keys(updateFields).length > 0) {
-    await db.update(offline_orders).set(updateFields).where(eq(offline_orders.id, id));
-  }
-
-  if (input.items && Array.isArray(input.items)) {
-    if (input.items.length === 0) throw new Error('Pesanan offline harus memiliki minimal 1 barang');
-    await db.delete(offline_order_items).where(eq(offline_order_items.offline_order_id, id));
-
-    for (const item of input.items) {
-      const cleanSku = item.seller_sku.trim();
-      const prod = await findProductBySellerSku(cleanSku);
-      const productName = item.product_name?.trim() || prod?.name || cleanSku;
-
-      await db.insert(offline_order_items).values({
-        offline_order_id: id,
-        product_id: prod?.id ?? null,
-        seller_sku: prod?.seller_sku ?? cleanSku,
-        product_name: productName,
-        qty: item.qty,
-        price: item.price ?? 0,
-      });
+  if (input.items?.length === 0) throw new Error('Pesanan wajib memiliki barang');
+  const rows = input.items ? await prepareItems(input.items) : undefined;
+  db.transaction((tx) => {
+    if (Object.keys(updateFields).length) tx.update(offline_orders).set(updateFields).where(eq(offline_orders.id, id)).run();
+    if (!rows) return;
+    const existing = tx.select().from(offline_order_items).where(eq(offline_order_items.offline_order_id, id)).all();
+    const additions = [];
+    for (const row of rows) {
+      let needed = row.qty;
+      while (needed > 0) {
+        const index = existing.findIndex(item => item.seller_sku === row.seller_sku);
+        if (index < 0) break;
+        const [item] = existing.splice(index, 1);
+        const keep = Math.min(item.qty, needed);
+        if (keep < item.qty) shrinkOfflineIssue(item.id, item.qty, keep, item.cogs_unit_fifo ?? 0);
+        tx.update(offline_order_items).set({ price: row.price, product_name: row.product_name, qty: keep })
+          .where(eq(offline_order_items.id, item.id)).run();
+        needed -= keep;
+      }
+      if (needed) additions.push({ ...row, qty: needed, offline_order_id: id });
     }
-  }
+    for (const item of existing) tx.delete(offline_order_items).where(eq(offline_order_items.id, item.id)).run();
+    for (const row of additions) tx.insert(offline_order_items).values(row).run();
+  }, { behavior: 'immediate' });
 
   return await getOfflineOrderById(id);
 }

@@ -54,9 +54,22 @@ const selectedCategory = ref('');
 const selectedStatus = ref<'all' | 'habis' | 'menipis' | 'normal' | 'berlebih'>('all');
 
 // Modal: Batch Stok Baru (HANYA SATU-SATUNYA CARA MENAMBAH STOK)
+interface BatchItemRow {
+  seller_sku: string;
+  qty: number;
+  showCogs?: boolean;
+  cogs_bahan_utama?: number | null;
+  cogs_aksesori?: number | null;
+  cogs_kemasan?: number | null;
+  cogs_tenaga_kerja?: number | null;
+  cogs_overhead?: number | null;
+  target_price?: number | null;
+  tiktok_fee_percent?: number | null;
+}
+
 const showBatchModal = ref(false);
 const batchNotes = ref('');
-const batchItems = ref<Array<{ seller_sku: string; qty: number }>>([{ seller_sku: '', qty: 1 }]);
+const batchItems = ref<BatchItemRow[]>([{ seller_sku: '', qty: 1 }]);
 const isSavingBatch = ref(false);
 const batchError = ref('');
 
@@ -385,7 +398,20 @@ function removeBatchItemRow(index: number) {
 }
 
 async function submitStockBatch() {
-  const validItems = batchItems.value.filter((it) => it.seller_sku && it.qty > 0);
+  const validItems = batchItems.value
+    .filter((it) => it.seller_sku && it.qty > 0)
+    .map((it) => ({
+      seller_sku: it.seller_sku,
+      qty: it.qty,
+      cogs_bahan_utama: it.cogs_bahan_utama ? Number(it.cogs_bahan_utama) : undefined,
+      cogs_aksesori: it.cogs_aksesori ? Number(it.cogs_aksesori) : undefined,
+      cogs_kemasan: it.cogs_kemasan ? Number(it.cogs_kemasan) : undefined,
+      cogs_tenaga_kerja: it.cogs_tenaga_kerja ? Number(it.cogs_tenaga_kerja) : undefined,
+      cogs_overhead: it.cogs_overhead ? Number(it.cogs_overhead) : undefined,
+      target_price: it.target_price ? Number(it.target_price) : undefined,
+      tiktok_fee_percent: it.tiktok_fee_percent ? Number(it.tiktok_fee_percent) : undefined,
+    }));
+
   if (validItems.length === 0) {
     batchError.value = 'Harap isi minimal 1 produk dengan jumlah Qty lebih dari 0.';
     return;
@@ -1174,52 +1200,130 @@ onMounted(() => {
               </button>
             </div>
 
-            <div class="space-y-2 max-h-60 overflow-y-auto pr-1">
+            <div class="space-y-2 max-h-72 overflow-y-auto pr-1">
               <div
                 v-for="(row, idx) in batchItems"
                 :key="idx"
-                class="flex items-center space-x-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200"
+                class="flex flex-col bg-slate-50 p-2.5 rounded-xl border border-slate-200 space-y-2"
               >
-                <!-- Seller SKU Dropdown -->
-                <select
-                  v-model="row.seller_sku"
-                  required
-                  class="flex-1 px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-mono font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
-                >
-                  <option value="" disabled>-- Pilih Seller SKU --</option>
-                  <option v-for="p in stockItems" :key="p.id" :value="p.seller_sku">
-                    {{ p.seller_sku }} - {{ p.name }}
-                  </option>
-                </select>
-
-                <!-- Qty Input -->
-                <div class="w-24">
-                  <input
-                    v-model.number="row.qty"
-                    type="number"
-                    min="1"
+                <div class="flex items-center space-x-2">
+                  <!-- Seller SKU Dropdown -->
+                  <select
+                    v-model="row.seller_sku"
                     required
-                    placeholder="Qty"
-                    class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-bold text-center font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
-                  />
+                    class="flex-1 px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-mono font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                  >
+                    <option value="" disabled>-- Pilih Seller SKU --</option>
+                    <option v-for="p in stockItems" :key="p.id" :value="p.seller_sku">
+                      {{ p.seller_sku }} - {{ p.name }}
+                    </option>
+                  </select>
+
+                  <!-- Qty Input -->
+                  <div class="w-24">
+                    <input
+                      v-model.number="row.qty"
+                      type="number"
+                      min="1"
+                      required
+                      placeholder="Qty"
+                      class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-bold text-center font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                    />
+                  </div>
+
+                  <!-- Toggle COGS -->
+                  <button
+                    type="button"
+                    @click="row.showCogs = !row.showCogs"
+                    class="px-2 py-2 rounded-lg text-[10px] font-bold border transition cursor-pointer shrink-0"
+                    :class="[
+                      row.showCogs
+                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                        : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
+                    ]"
+                    title="Sesuaikan HPP khusus batch ini (opsional)"
+                  >
+                    HPP
+                  </button>
+
+                  <!-- Hapus Baris -->
+                  <button
+                    type="button"
+                    @click="removeBatchItemRow(idx)"
+                    class="p-2 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition cursor-pointer shrink-0"
+                    title="Hapus baris"
+                  >
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                      />
+                    </svg>
+                  </button>
                 </div>
 
-                <!-- Hapus Baris -->
-                <button
-                  type="button"
-                  @click="removeBatchItemRow(idx)"
-                  class="p-2 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition cursor-pointer"
-                  title="Hapus baris"
+                <!-- Optional COGS Customization for Batch -->
+                <div
+                  v-if="row.showCogs"
+                  class="pt-2 border-t border-slate-200/80 grid grid-cols-2 sm:grid-cols-6 gap-2 bg-white p-2.5 rounded-lg border border-slate-200"
                 >
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                  <div>
+                    <label class="block text-[9px] font-bold text-slate-500 uppercase">Bahan Utama</label>
+                    <input
+                      v-model.number="row.cogs_bahan_utama"
+                      type="number"
+                      placeholder="Master"
+                      class="mt-0.5 w-full px-2 py-1 bg-slate-50 border border-slate-300 rounded text-[11px] font-mono"
                     />
-                  </svg>
-                </button>
+                  </div>
+                  <div>
+                    <label class="block text-[9px] font-bold text-slate-500 uppercase">Aksesori</label>
+                    <input
+                      v-model.number="row.cogs_aksesori"
+                      type="number"
+                      placeholder="Master"
+                      class="mt-0.5 w-full px-2 py-1 bg-slate-50 border border-slate-300 rounded text-[11px] font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label class="block text-[9px] font-bold text-slate-500 uppercase">Kemasan</label>
+                    <input
+                      v-model.number="row.cogs_kemasan"
+                      type="number"
+                      placeholder="Master"
+                      class="mt-0.5 w-full px-2 py-1 bg-slate-50 border border-slate-300 rounded text-[11px] font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label class="block text-[9px] font-bold text-slate-500 uppercase">Tenaga Kerja</label>
+                    <input
+                      v-model.number="row.cogs_tenaga_kerja"
+                      type="number"
+                      placeholder="Master"
+                      class="mt-0.5 w-full px-2 py-1 bg-slate-50 border border-slate-300 rounded text-[11px] font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label class="block text-[9px] font-bold text-slate-500 uppercase">Overhead</label>
+                    <input
+                      v-model.number="row.cogs_overhead"
+                      type="number"
+                      placeholder="Master"
+                      class="mt-0.5 w-full px-2 py-1 bg-slate-50 border border-slate-300 rounded text-[11px] font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label class="block text-[9px] font-bold text-slate-500 uppercase">Target Jual</label>
+                    <input
+                      v-model.number="row.target_price"
+                      type="number"
+                      placeholder="Master"
+                      class="mt-0.5 w-full px-2 py-1 bg-slate-50 border border-slate-300 rounded text-[11px] font-mono font-bold text-indigo-900"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
           </div>

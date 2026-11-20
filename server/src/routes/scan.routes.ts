@@ -47,6 +47,7 @@ scanRouter.post('/undo', requireAuth, async (req, res, next) => {
 
     const result = await undoScan({
       orderId: parsed.orderId,
+      userId: req.session.user!.id,
       mode: parsed.mode,
       logId: parsed.logId,
     });

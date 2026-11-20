@@ -201,6 +201,17 @@ describe('Batch Service - Duplicate Detection & Discard', () => {
     expect(restored?.status).toBe('menunggu_dikemas');
   });
 
+  it('preserves processed package contents on forced reimport', async () => {
+    const resi = 'JY2174096542';
+    const packed = await processScan({ resi, mode:'packing', userId:testUserId });
+    const result = await processAndSaveBatch({sourceFilename:'test.pdf',pdfPath:samplePdfPath,
+      userId:testUserId,skipDuplicates:false});
+    expect(result.stats.skipped).toBeGreaterThanOrEqual(1);
+    const saved = await getOrderById(packed.order!.id);
+    expect(saved?.batch_id).toBe(packed.order!.batch_id);
+    expect(saved?.items.map(item => item.id)).toEqual(packed.items.map(item => item.id));
+  });
+
   it('deletes single order and its items, and decrements batch total_orders', async () => {
     const [orderToDelete] = await db.select().from(orders).where(eq(orders.resi, 'JY2196806542'));
     expect(orderToDelete).toBeDefined();

@@ -35,7 +35,7 @@ app.use(
     cookie: {
       httpOnly: true,
       sameSite: 'lax',
-      secure: false, // Allows local LAN access over HTTP
+      secure: config.isProduction,
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days session lifetime
     },
   })

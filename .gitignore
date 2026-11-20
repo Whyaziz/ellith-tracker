@@ -36,7 +36,6 @@ Thumbs.db
 
 .gemini
 .agents
-docs/
 docs/*
 !docs/*.md
 !docs/*.txt

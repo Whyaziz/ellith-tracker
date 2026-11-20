@@ -47,7 +47,7 @@ interface ScanLogItem {
   order_id: number | null;
   resi_scanned: string;
   mode: 'packing' | 'pengiriman';
-  result: 'ok' | 'duplikat' | 'tidak_ditemukan' | 'status_tidak_valid';
+  result: 'ok' | 'duplikat' | 'tidak_ditemukan' | 'status_tidak_valid' | 'dibatalkan' | 'undo';
   scanned_at: string;
   username: string | null;
   recipient_name: string | null;
@@ -839,6 +839,9 @@ onUnmounted(() => {
                 >
                   <span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
                   BERHASIL
+                </span>
+                <span v-else-if="log.result === 'undo' || log.result === 'dibatalkan'">
+                  {{ log.result === 'undo' ? 'PEMBATALAN SCAN' : 'DIBATALKAN' }}
                 </span>
                 <span
                   v-else-if="log.result === 'duplikat'"

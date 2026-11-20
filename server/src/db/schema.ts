@@ -92,6 +92,8 @@ export const order_items = sqliteTable(
     sku: text('sku').notNull(),
     seller_sku: text('seller_sku'), // Boleh null
     qty: integer('qty', { mode: 'number' }).notNull(),
+    cogs_unit_fifo: real('cogs_unit_fifo'),
+    stock_batch_id: integer('stock_batch_id'),
   },
   (table) => [
     index('order_items_order_id_idx').on(table.order_id),
@@ -107,7 +109,7 @@ export const scan_logs = sqliteTable(
     resi_scanned: text('resi_scanned').notNull(),
     mode: text('mode', { enum: ['packing', 'pengiriman'] }).notNull(),
     result: text('result', {
-      enum: ['ok', 'duplikat', 'tidak_ditemukan', 'status_tidak_valid'],
+      enum: ['ok', 'duplikat', 'tidak_ditemukan', 'status_tidak_valid', 'dibatalkan', 'undo'],
     }).notNull(),
     user_id: integer('user_id')
       .notNull()
@@ -180,6 +182,15 @@ export const stock_batch_items = sqliteTable(
     product_id: integer('product_id').references(() => products.id, { onDelete: 'set null' }),
     seller_sku: text('seller_sku').notNull(),
     qty: integer('qty', { mode: 'number' }).notNull(),
+    cogs_bahan_utama: real('cogs_bahan_utama'),
+    cogs_aksesori: real('cogs_aksesori'),
+    cogs_kemasan: real('cogs_kemasan'),
+    cogs_tenaga_kerja: real('cogs_tenaga_kerja'),
+    cogs_overhead: real('cogs_overhead'),
+    cogs_total: real('cogs_total'),
+    target_price: real('target_price'),
+    tiktok_fee_percent: real('tiktok_fee_percent'),
+    remaining_qty: integer('remaining_qty', { mode: 'number' }),
   },
   (table) => [
     index('stock_batch_items_batch_idx').on(table.stock_batch_id),
@@ -281,6 +292,9 @@ export const offline_order_items = sqliteTable(
     product_name: text('product_name').notNull(),
     qty: integer('qty', { mode: 'number' }).notNull(),
     price: real('price').notNull().default(0),
+    cogs_unit_ma: real('cogs_unit_ma'),
+    cogs_unit_fifo: real('cogs_unit_fifo'),
+    stock_batch_id: integer('stock_batch_id'),
   },
   (table) => [
     index('offline_order_items_order_idx').on(table.offline_order_id),
@@ -316,4 +330,38 @@ export const system_settings = sqliteTable('system_settings', {
 
 export type SystemSetting = typeof system_settings.$inferSelect;
 export type NewSystemSetting = typeof system_settings.$inferInsert;
+
+// ----------------- HPP & KALKULATOR PROFIT (COGS) -----------------
+export const product_cogs = sqliteTable(
+  'product_cogs',
+  {
+    id: integer('id', { mode: 'number' }).primaryKey({ autoIncrement: true }),
+    product_id: integer('product_id')
+      .notNull()
+      .unique()
+      .references(() => products.id, { onDelete: 'cascade' }),
+    bahan_utama: real('bahan_utama').notNull().default(0),
+    aksesori: real('aksesori').notNull().default(0),
+    kemasan: real('kemasan').notNull().default(0),
+    tenaga_kerja: real('tenaga_kerja').notNull().default(0),
+    overhead: real('overhead').notNull().default(0),
+    target_price: real('target_price').notNull().default(0),
+    tiktok_fee_percent: real('tiktok_fee_percent').notNull().default(25),
+    target_margin_percent: real('target_margin_percent').notNull().default(40),
+    notes: text('notes'),
+    created_at: text('created_at')
+      .notNull()
+      .default(sql`(CURRENT_TIMESTAMP)`),
+    updated_at: text('updated_at')
+      .notNull()
+      .default(sql`(CURRENT_TIMESTAMP)`),
+  },
+  (table) => [
+    uniqueIndex('product_cogs_product_id_idx').on(table.product_id),
+  ]
+);
+
+export type ProductCogs = typeof product_cogs.$inferSelect;
+export type NewProductCogs = typeof product_cogs.$inferInsert;
+
 

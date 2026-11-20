@@ -63,7 +63,7 @@ const availableCustomers = ref<CustomerOption[]>([]);
 
 const offlineForm = ref({
   order_no: '',
-  order_date: new Date().toISOString().slice(0, 10),
+  order_date: new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Jakarta' }).format(new Date()),
   customer_id: null as number | null,
   customer_name: '',
   customer_phone: '',
@@ -263,11 +263,29 @@ const stats = computed(() => {
   };
 });
 
+const skuFifoHintMap = ref<Record<string, number>>({});
+
+async function fetchCogsHints() {
+  try {
+    const res = await api.get<{ data: { items: Array<{ seller_sku: string; current_fifo_cogs: number }> } }>('/api/cogs');
+    if (res.data?.items) {
+      const map: Record<string, number> = {};
+      for (const it of res.data.items) {
+        map[it.seller_sku] = it.current_fifo_cogs;
+      }
+      skuFifoHintMap.value = map;
+    }
+  } catch {
+    // Abaikan jika gagal memuat hint HPP
+  }
+}
+
 // Modal Offline Order
 function openCreateOfflineOrder() {
+  fetchCogsHints();
   offlineForm.value = {
     order_no: '',
-    order_date: new Date().toISOString().slice(0, 10),
+    order_date: new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Jakarta' }).format(new Date()),
     customer_id: null,
     customer_name: '',
     customer_phone: '',
@@ -1311,14 +1329,21 @@ onMounted(() => {
                 </div>
 
                 <!-- Price -->
-                <div class="w-28">
+                <div class="w-32">
                   <input
                     v-model.number="row.price"
                     type="number"
                     min="0"
-                    placeholder="Harga"
+                    placeholder="Harga Jual"
                     class="w-full px-2.5 py-2 bg-white border border-slate-300 rounded-lg font-medium text-right font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
                   />
+                  <div
+                    v-if="row.seller_sku && skuFifoHintMap[row.seller_sku]"
+                    class="text-[9px] text-slate-400 font-mono text-right mt-0.5 truncate"
+                    :title="`HPP FIFO Kloter Aktif: ${formatCurrency(skuFifoHintMap[row.seller_sku])}`"
+                  >
+                    HPP: {{ formatCurrency(skuFifoHintMap[row.seller_sku]) }}
+                  </div>
                 </div>
 
                 <!-- Delete button -->

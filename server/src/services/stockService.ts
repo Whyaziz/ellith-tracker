@@ -1,5 +1,5 @@
 import { eq, sql, desc, gte } from 'drizzle-orm';
-import { db } from '../db/client.js';
+import { db, sqlite } from '../db/client.js';
 import {
   products,
   product_categories,
@@ -11,6 +11,7 @@ import {
   offline_orders,
   offline_order_items,
   system_settings,
+  product_cogs,
 } from '../db/schema.js';
 import { findProductBySellerSku } from './productService.js';
 
@@ -20,6 +21,13 @@ export interface CreateStockBatchInput {
   items: Array<{
     seller_sku: string;
     qty: number;
+    cogs_bahan_utama?: number | null;
+    cogs_aksesori?: number | null;
+    cogs_kemasan?: number | null;
+    cogs_tenaga_kerja?: number | null;
+    cogs_overhead?: number | null;
+    target_price?: number | null;
+    tiktok_fee_percent?: number | null;
   }>;
   userId: number;
 }
@@ -87,14 +95,7 @@ export async function createStockBatch(input: CreateStockBatchInput) {
   }
 
   // Buat batch stok baru
-  const [batch] = await db
-    .insert(stock_batches)
-    .values({
-      batch_code,
-      notes: input.notes?.trim() || null,
-      created_by: input.userId,
-    })
-    .returning();
+  const rows: Omit<typeof stock_batch_items.$inferInsert, 'stock_batch_id'>[] = [];
 
   // Validasi dan simpan item barang
   for (const item of input.items) {
@@ -106,15 +107,66 @@ export async function createStockBatch(input: CreateStockBatchInput) {
 
     const prod = await findProductBySellerSku(cleanSku);
 
-    await db.insert(stock_batch_items).values({
-      stock_batch_id: batch.id,
+    // Ambil default master COGS jika tidak ditentukan secara custom per batch
+    let cogsBu = item.cogs_bahan_utama ?? null;
+    let cogsAks = item.cogs_aksesori ?? null;
+    let cogsKem = item.cogs_kemasan ?? null;
+    let cogsTk = item.cogs_tenaga_kerja ?? null;
+    let cogsOvh = item.cogs_overhead ?? null;
+    let targetPrice = item.target_price ?? null;
+    let tiktokFee = item.tiktok_fee_percent ?? null;
+
+    if (prod && cogsBu === null) {
+      const [masterCogs] = await db
+        .select()
+        .from(product_cogs)
+        .where(eq(product_cogs.product_id, prod.id))
+        .limit(1);
+      if (masterCogs) {
+        cogsBu = masterCogs.bahan_utama;
+        cogsAks = masterCogs.aksesori;
+        cogsKem = masterCogs.kemasan;
+        cogsTk = masterCogs.tenaga_kerja;
+        cogsOvh = masterCogs.overhead;
+        targetPrice = masterCogs.target_price;
+        tiktokFee = masterCogs.tiktok_fee_percent;
+      }
+    }
+
+    const cogsTotal =
+      cogsBu !== null || cogsAks !== null || cogsKem !== null || cogsTk !== null || cogsOvh !== null
+        ? (cogsBu ?? 0) + (cogsAks ?? 0) + (cogsKem ?? 0) + (cogsTk ?? 0) + (cogsOvh ?? 0)
+        : null;
+
+    rows.push({
       product_id: prod?.id ?? null,
       seller_sku: prod?.seller_sku ?? cleanSku,
       qty: item.qty,
+      cogs_bahan_utama: cogsBu,
+      cogs_aksesori: cogsAks,
+      cogs_kemasan: cogsKem,
+      cogs_tenaga_kerja: cogsTk,
+      cogs_overhead: cogsOvh,
+      cogs_total: cogsTotal,
+      target_price: targetPrice,
+      tiktok_fee_percent: tiktokFee,
+      remaining_qty: item.qty,
     });
   }
 
-  return await getStockBatchById(batch.id);
+  const batch = db.transaction((tx) => {
+    const [batch] = tx
+      .insert(stock_batches)
+      .values({
+        batch_code,
+        notes: input.notes?.trim() || null,
+        created_by: input.userId,
+      })
+      .returning().all();
+    for (const row of rows) tx.insert(stock_batch_items).values({ ...row, stock_batch_id: batch.id }).run();
+    return batch;
+  });
+  return getStockBatchById(batch.id);
 }
 
 export async function getStockBatches() {
@@ -124,13 +176,15 @@ export async function getStockBatches() {
     .orderBy(desc(stock_batches.id));
 
   // Ambil total item dan qty per batch
+  const grouped = new Map<number, (typeof stock_batch_items.$inferSelect)[]>();
+  for (const item of await db.select().from(stock_batch_items)) {
+    const group = grouped.get(item.stock_batch_id);
+    if (group) group.push(item);
+    else grouped.set(item.stock_batch_id, [item]);
+  }
   const batchSummaries = [];
   for (const b of batches) {
-    const items = await db
-      .select()
-      .from(stock_batch_items)
-      .where(eq(stock_batch_items.stock_batch_id, b.id));
-
+    const items = grouped.get(b.id) ?? [];
     const totalQty = items.reduce((s, it) => s + it.qty, 0);
     batchSummaries.push({
       ...b,
@@ -356,8 +410,8 @@ export function isSkuMatch(
   if (targetLower.length >= 6 && lower.includes(targetLower)) return true;
 
   // 7. Component words set match (e.g. ATS-PNC-Army vs PNC-ATS-Army)
-  const targetParts = targetLower.split(/[\-_ ]+/).map((s) => s.replace(/top/g, 'ats').replace(/set/g, 'stl')).filter(Boolean);
-  const rawParts = lower.split(/[\-_ ]+/).map((s) => s.replace(/top/g, 'ats').replace(/set/g, 'stl')).filter(Boolean);
+  const targetParts = targetLower.split(/[-_ ]+/).map((s) => s.replace(/top/g, 'ats').replace(/set/g, 'stl')).filter(Boolean);
+  const rawParts = lower.split(/[-_ ]+/).map((s) => s.replace(/top/g, 'ats').replace(/set/g, 'stl')).filter(Boolean);
   if (targetParts.length >= 2 && targetParts.every((tp) => rawParts.includes(tp))) {
     return true;
   }
@@ -385,7 +439,7 @@ export function findMasterProductForOrderItem<
   // 2. Ekstraksi kode SKU dari string gabungan (contoh: "Hitam CLN-Hitam", "Cream PNC-ATS-Cream", "BIRU JK-Biru Muda MUDA")
   const rawList = [item.seller_sku, item.sku].filter(Boolean) as string[];
   for (const raw of rawList) {
-    const extracted = raw.match(/(CLN|PNC|JK|JKT|KL|KL2|ROK|GMS|JH|CL)[\-_ ][A-Za-z0-9\-_ ]+/i);
+    const extracted = raw.match(/(CLN|PNC|JK|JKT|KL|KL2|ROK|GMS|JH|CL)[-_ ][A-Za-z0-9\-_ ]+/i);
     if (extracted) {
       let code = extracted[0].trim();
       code = code.replace(/\s+(MUDA|ARMY|HITAM|NAVY|VIOLET|CREAM|MAROON|PINK|SAGE)$/i, '');
@@ -462,36 +516,27 @@ export async function getStockCutoffDate(): Promise<string | null> {
 }
 
 export async function setStockCutoffDate(dateIso: string | null): Promise<string | null> {
-  if (!dateIso || !dateIso.trim()) {
-    // Hapus tanggal cut-off -> sistem kembali menghitung dari awal waktu
-    await db.delete(system_settings).where(eq(system_settings.key, 'stock_cutoff_date'));
-    return null;
-  }
-
-  const cleanDate = dateIso.trim();
-  const parsed = new Date(cleanDate);
-  if (isNaN(parsed.getTime())) {
-    throw new Error('Format tanggal cut-off tidak valid');
-  }
-
-  const isoValue = parsed.toISOString();
-
-  await db
-    .insert(system_settings)
-    .values({
-      key: 'stock_cutoff_date',
-      value: isoValue,
-      updated_at: new Date().toISOString(),
-    })
-    .onConflictDoUpdate({
-      target: system_settings.key,
-      set: {
-        value: isoValue,
-        updated_at: new Date().toISOString(),
-      },
-    });
-
-  return isoValue;
+  const parsed = dateIso?.trim() ? new Date(dateIso) : null;
+  if (parsed && !Number.isFinite(parsed.getTime())) throw new Error('Format tanggal cut-off tidak valid');
+  const next = parsed?.toISOString() ?? null;
+  db.transaction(tx => {
+    const key = 'stock_cutoff_date';
+    const previous = tx.select().from(system_settings).where(eq(system_settings.key,key)).get()?.value ?? null;
+    if (previous === next) return;
+    const firstAffected = [previous,next].filter((value): value is string => !!value).sort()[0];
+    sqlite.prepare(`CREATE TEMP TABLE cutoff_replay AS SELECT * FROM inventory_issues
+      WHERE datetime(occurred_at)>=datetime(?)`).run(firstAffected);
+    sqlite.exec('DELETE FROM inventory_issues WHERE id IN (SELECT id FROM cutoff_replay)');
+    if (next) {
+      tx.insert(system_settings).values({ key, value: next }).onConflictDoUpdate({
+        target: system_settings.key, set: {value: next, updated_at: new Date().toISOString()}
+      }).run();
+    } else tx.delete(system_settings).where(eq(system_settings.key,key)).run();
+    sqlite.exec(`INSERT INTO inventory_issues(source,item_id,sku,qty,occurred_at)
+      SELECT source,item_id,sku,qty,occurred_at FROM cutoff_replay ORDER BY julianday(occurred_at),id;
+      DROP TABLE temp.cutoff_replay;`);
+  }, {behavior:'immediate'});
+  return next;
 }
 
 // ----------------- REKAPITULASI STOK PER SELLER SKU (OPTIMIZED SINGLE-PASS HASH MAP) -----------------
@@ -736,13 +781,13 @@ export async function getStockOverview(filters?: {
     let health_status: 'stockout' | 'understock' | 'normal' | 'overstock' = 'normal';
     let health_action = 'Stok dalam batas aman dan ideal.';
 
-    if (available_stock <= 0) {
+    if (physical_stock <= 0) {
       health_status = 'stockout';
       health_action = 'Stok habis (Stockout)! Segera jadwalkan batch produksi/restock darurat.';
-    } else if (available_stock < p.min_stock) {
+    } else if (physical_stock <= p.min_stock) {
       health_status = 'understock';
       health_action = `Stok menipis di bawah ambang minimum (${p.min_stock} pcs). Masukkan ke antrean produksi minggu ini.`;
-    } else if (available_stock > p.max_stock) {
+    } else if (physical_stock > p.max_stock) {
       health_status = 'overstock';
       health_action = `Stok menumpuk di atas ambang maksimum (${p.max_stock} pcs). Pertimbangkan bundling / promo flash sale.`;
     }
